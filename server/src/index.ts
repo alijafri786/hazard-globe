@@ -3,7 +3,7 @@ import { createApp } from './app.js'
 import { config, pushEnabled } from './config.js'
 import { createPoller } from './poller.js'
 import { sendPush, type SendResult } from './push.js'
-import { openStore } from './store/index.js'
+import { openStore, storeKind } from './store/index.js'
 import type { AlertPayload } from './types.js'
 
 // End-to-end test runs: no GDACS polling, and alerts are logged instead of pushed
@@ -18,7 +18,7 @@ const poller = createPoller(store, send)
 const app = createApp({ store, poller, sendPush: send })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
-  const mode = e2e ? 'E2E mode, no polling' : `push ${pushEnabled ? 'on' : 'OFF — set VAPID keys'}`
+  const mode = e2e ? 'E2E mode, no polling' : `push ${pushEnabled ? 'on' : 'OFF — set VAPID keys'}, ${storeKind} store`
   console.log(`hazard-globe server on http://localhost:${info.port} (${mode})`)
   if (!e2e) poller.start()
 })

@@ -15,6 +15,8 @@ export const config = {
   pollIntervalMinutes: Math.max(10, num('POLL_INTERVAL_MINUTES', 15)),
   lookbackDays: num('LOOKBACK_DAYS', 10),
   dataFile: process.env.DATA_FILE ?? './data/store.json',
+  /** When set, subscriptions live in Postgres instead of DATA_FILE */
+  databaseUrl: process.env.DATABASE_URL ?? '',
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
   /** Reverse proxies in front of the server; their X-Forwarded-For entries are trusted for client IPs. */
   trustProxy: Number.parseInt(process.env.TRUST_PROXY ?? '0', 10) || 0,

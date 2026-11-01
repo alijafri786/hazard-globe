@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import type { AlertLevel, HazardType, Store } from '../types.js'
 
 /** The original format: one area and one push endpoint per subscription, no version field. */
@@ -32,7 +32,9 @@ export function migrateStore(raw: unknown, now = new Date()): { store: Store; mi
         channels: [{ kind: 'push', endpoint: s.push.endpoint, keys: s.push.keys }],
         areas: [
           {
-            id: randomUUID(),
+            // Stable, so migrating or importing the same file twice gives the same area. Hashed because
+            // subscription ids are secrets.
+            id: createHash('sha256').update(`area:${s.id}`).digest('hex').slice(0, 32),
             ...s.area,
             hazards: s.hazards,
             minAlert: s.minAlert,

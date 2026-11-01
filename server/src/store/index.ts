@@ -1,6 +1,8 @@
 import { config } from '../config.js'
 import type { AlertLevel, Subscription } from '../types.js'
+import { pgDb } from './db.js'
 import { openJsonStore } from './json.js'
+import { openPostgresStore } from './postgres.js'
 
 /**
  * Everything the server needs from storage, as intent-level operations so a database version
@@ -19,6 +21,9 @@ export interface SubscriptionStore {
   pruneNotified(activeKeys: Set<string>, before: Date): Promise<number>
 }
 
+export const storeKind = config.databaseUrl ? 'postgres' : 'json'
+
+/** Postgres when DATABASE_URL is set (migrating it first), otherwise the JSON file. */
 export function openStore(): Promise<SubscriptionStore> {
-  return openJsonStore(config.dataFile)
+  return config.databaseUrl ? openPostgresStore(pgDb(config.databaseUrl)) : openJsonStore(config.dataFile)
 }
