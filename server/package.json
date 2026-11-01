@@ -15,7 +15,7 @@
     "store:import": "tsx src/store/import-cli.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.0",
+    "@hono/node-server": "^2.1.5",
     "@turf/boolean-intersects": "^7.1.0",
     "@turf/circle": "^7.1.0",
     "@turf/helpers": "^7.1.0",
