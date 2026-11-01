@@ -38,6 +38,7 @@ export function migrateStore(raw: unknown, now = new Date()): { store: Store; mi
             ...s.area,
             hazards: s.hazards,
             minAlert: s.minAlert,
+            forecastAlerts: false,
             notified: Object.fromEntries(Object.entries(s.notified).map(([key, level]) => [key, { level, at }])),
           },
         ],

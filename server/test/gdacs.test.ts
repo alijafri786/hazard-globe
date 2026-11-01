@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchEventGeometry, fetchEvents, fetchGeometryCollection } from '../src/gdacs.js'
+import { fetchEvents, fetchGeometryCollection } from '../src/gdacs.js'
 import { makeEvent, square } from './fixtures.js'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
@@ -83,17 +83,20 @@ describe('fetchEvents', () => {
   })
 })
 
-describe('fetchEventGeometry', () => {
+const geometries = async (...args: Parameters<typeof fetchGeometryCollection>) =>
+  ((await fetchGeometryCollection(...args))?.features ?? []).map((f) => f.geometry)
+
+describe('fetchGeometryCollection', () => {
   it('returns the geometries and caches them per episode', async () => {
     const fetch = mockFetch(() => json(collection({ type: 'Feature', properties: {}, geometry: square(0, 0, 1) })))
-    expect(await fetchEventGeometry('TC', 501, 1)).toEqual([square(0, 0, 1)])
-    expect(await fetchEventGeometry('TC', 501, 1)).toEqual([square(0, 0, 1)])
+    expect(await geometries('TC', 501, 1)).toEqual([square(0, 0, 1)])
+    expect(await geometries('TC', 501, 1)).toEqual([square(0, 0, 1)])
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('treats 404 as no footprint yet', async () => {
     mockFetch(() => new Response(null, { status: 404 }))
-    expect(await fetchEventGeometry('FL', 502, 1)).toEqual([])
+    expect(await geometries('FL', 502, 1)).toEqual([])
   })
 
   it('asks again later when there was no footprint yet', async () => {
@@ -103,15 +106,9 @@ describe('fetchEventGeometry', () => {
         ? new Response(null, { status: 204 })
         : json(collection({ type: 'Feature', properties: {}, geometry: square(0, 0, 1) })),
     )
-    expect(await fetchEventGeometry('TC', 503, 1)).toEqual([])
-    expect(await fetchEventGeometry('TC', 503, 1)).toEqual([square(0, 0, 1)])
+    expect(await geometries('TC', 503, 1)).toEqual([])
+    expect(await geometries('TC', 503, 1)).toEqual([square(0, 0, 1)])
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
-  it('shares its cache with the public geometry endpoint', async () => {
-    const fetch = mockFetch(() => json(collection({ type: 'Feature', properties: {}, geometry: square(0, 0, 1) })))
-    await fetchEventGeometry('TC', 504, 1)
-    expect((await fetchGeometryCollection('TC', 504, 1))?.features).toHaveLength(1)
-    expect(fetch).toHaveBeenCalledTimes(1)
-  })
 })

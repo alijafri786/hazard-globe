@@ -8,7 +8,9 @@ const input = (extra: object = {}) => ({ label: 'Home', lon: 1, lat: 2, radiusKm
 describe('parseAreas', () => {
   it('accepts 1 to MAX_AREAS areas with defaults filled in', () => {
     const [area] = parseAreas([{ lon: 1, lat: 2, radiusKm: 100 }])!
-    expect(area).toMatchObject({ label: 'My area', hazards: ['TC', 'FL'], minAlert: 'Orange', notified: {} })
+    expect(area).toMatchObject({ label: 'My area', hazards: ['TC', 'FL'], minAlert: 'Orange', forecastAlerts: false, notified: {} })
+    expect(parseAreas([input({ forecastAlerts: true })])![0].forecastAlerts).toBe(true)
+    expect(parseAreas([input({ forecastAlerts: 'yes' })])![0].forecastAlerts).toBe(false)
     expect(parseAreas([])).toBeNull()
     expect(parseAreas(Array.from({ length: MAX_AREAS }, () => input()))).toHaveLength(MAX_AREAS)
     expect(parseAreas(Array.from({ length: MAX_AREAS + 1 }, () => input()))).toBeNull()

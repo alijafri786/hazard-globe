@@ -39,6 +39,13 @@ const hasCentre = computed(() => draft.value?.lon !== undefined && draft.value?.
         <input v-model="draft.hazards" type="checkbox" :value="h" /> {{ HAZARD_LABELS[h] }}
       </label>
     </fieldset>
+    <label v-if="draft.hazards.includes('TC')" class="check cone">
+      <input v-model="draft.forecastAlerts" type="checkbox" />
+      <span>
+        Also alert me when a cyclone's forecast cone reaches this area
+        <small>Earlier warning, but the storm may still miss: the cone is where its centre is likely to go.</small>
+      </span>
+    </label>
     <label class="field">
       Minimum alert level
       <select v-model="draft.minAlert">
@@ -98,6 +105,22 @@ legend {
   align-items: center;
   gap: 6px;
   font-size: 14px;
+}
+
+.cone {
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.cone input {
+  margin-top: 3px;
+}
+
+.cone small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .coords {

@@ -120,6 +120,7 @@ export function useWatchAreas(viewer: ShallowRef<Viewer | null>) {
       radiusKm: DEFAULTS.radiusKm,
       hazards: [...DEFAULTS.hazards],
       minAlert: DEFAULTS.minAlert,
+      forecastAlerts: false,
     }
   }
 

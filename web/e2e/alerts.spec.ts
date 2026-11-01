@@ -171,3 +171,29 @@ test('email alerts: confirm from the email, test, then one-click unsubscribe', a
   await expect(page.getByText('Your alerts were switched off on the server.')).toBeVisible()
   await expect(areaRow(page, 'Home')).toBeVisible()
 })
+
+test('forecast-cone alerts are opt-in per area, for cyclones only', async ({ page, request }) => {
+  await stubPush(page, 'https://push.example/e2e-cone')
+  await stubHazardData(page)
+  await openAlerts(page)
+
+  await page.getByRole('button', { name: '+ Add area' }).click()
+  await page.getByRole('button', { name: 'Use my location' }).click()
+  await page.getByLabel('Name').fill('Coast')
+  const cone = page.getByLabel("Also alert me when a cyclone's forecast cone reaches this area")
+  await expect(cone).not.toBeChecked()
+  await page.getByLabel('Tropical cyclones').uncheck()
+  await expect(cone).toHaveCount(0) // only offered when cyclones are watched
+  await page.getByLabel('Tropical cyclones').check()
+  await cone.check()
+  await page.getByRole('button', { name: 'Add area', exact: true }).click()
+  await expect(areaRow(page, 'Coast')).toContainText('forecast cones too')
+
+  await page.getByRole('button', { name: 'Turn on alerts' }).click()
+  await expect(status(page)).toContainText('Alerts turned on.')
+  const view = (await (await request.get(`/api/subscriptions/${await savedId(page)}`)).json()) as {
+    areas: { label: string; forecastAlerts: boolean }[]
+  }
+  expect(view.areas).toMatchObject([{ label: 'Coast', forecastAlerts: true }])
+  await page.getByRole('button', { name: 'Turn off all alerts' }).click()
+})

@@ -121,6 +121,7 @@ export function parseAreas(
       radiusKm,
       hazards: parseHazards(a.hazards ?? defaults.hazards),
       minAlert: parseLevel(a.minAlert ?? defaults.minAlert),
+      forecastAlerts: a.forecastAlerts === true,
       notified: moved ? {} : prev.notified,
     })
   }

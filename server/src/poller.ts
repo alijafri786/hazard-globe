@@ -1,7 +1,8 @@
-import { eventKey, planAlerts } from './alerts.js'
+import { coneKey, eventKey, planAlerts } from './alerts.js'
 import { config } from './config.js'
 import { anySent, sameChannel, type Deliver } from './delivery.js'
-import { fetchEventGeometry, fetchEvents } from './gdacs.js'
+import { splitGeometry } from './forecast.js'
+import { fetchEvents, fetchGeometryCollection } from './gdacs.js'
 import type { SubscriptionStore } from './store/index.js'
 import type { Channel, GdacsCollection } from './types.js'
 
@@ -32,7 +33,9 @@ export function createPoller(store: SubscriptionStore, deliver: Deliver) {
 
       const subs = await store.list()
       const alerts = await planAlerts(data.features, subs, ({ properties: p }) =>
-        fetchEventGeometry(p.eventtype, p.eventid, p.episodeid).catch(() => []),
+        fetchGeometryCollection(p.eventtype, p.eventid, p.episodeid)
+          .catch(() => null)
+          .then((collection) => splitGeometry(collection, p.eventtype)),
       )
       let sent = 0
       const gone = new Map<string, Channel[]>()
@@ -52,7 +55,7 @@ export function createPoller(store: SubscriptionStore, deliver: Deliver) {
       let expired = 0
       for (const [id, channels] of gone) if ((await removeChannels(id, channels)) === 'removed') expired++
       const pruned = await store.pruneNotified(
-        new Set(data.features.map(eventKey)),
+        new Set(data.features.flatMap((e) => [eventKey(e), coneKey(e)])),
         new Date(Date.now() - FORGET_AFTER_MS),
       )
       console.log(

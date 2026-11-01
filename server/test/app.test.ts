@@ -75,7 +75,7 @@ describe('POST /api/subscriptions', () => {
     expect(res.status).toBe(201)
     const view = (await res.json()) as View
     expect(view.areas).toEqual([
-      { id: expect.any(String), ...home, hazards: ['TC', 'FL'], minAlert: 'Orange' }, // no `notified`
+      { id: expect.any(String), ...home, hazards: ['TC', 'FL'], minAlert: 'Orange', forecastAlerts: false }, // no `notified`
     ])
     expect(view.channels).toEqual([{ kind: 'push' }]) // no endpoint or keys
     expect(await store.count()).toBe(1)

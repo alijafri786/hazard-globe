@@ -18,6 +18,7 @@ interface AreaRow {
   radius_km: number
   hazards: HazardType[]
   min_alert: AlertLevel
+  forecast_alerts: boolean
 }
 
 interface NotifiedRow {
@@ -98,6 +99,7 @@ async function load(db: Queryable, where: string, params: unknown[] = []): Promi
         radiusKm: a.radius_km,
         hazards: a.hazards,
         minAlert: a.min_alert,
+        forecastAlerts: a.forecast_alerts,
         notified: notifiedByArea.get(a.id) ?? {},
       })),
   }))
@@ -159,12 +161,12 @@ export async function openPostgresStore(db: Db): Promise<SubscriptionStore> {
             [a.id, a.lon, a.lat],
           )
           await tx.query(
-            `insert into areas (id, subscription_id, position, label, lon, lat, radius_km, hazards, min_alert)
-             values ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9)
+            `insert into areas (id, subscription_id, position, label, lon, lat, radius_km, hazards, min_alert, forecast_alerts)
+             values ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9, $10)
              on conflict (id) do update set subscription_id = excluded.subscription_id, position = excluded.position,
                label = excluded.label, lon = excluded.lon, lat = excluded.lat, radius_km = excluded.radius_km,
-               hazards = excluded.hazards, min_alert = excluded.min_alert`,
-            [a.id, sub.id, position, a.label, a.lon, a.lat, a.radiusKm, a.hazards, a.minAlert],
+               hazards = excluded.hazards, min_alert = excluded.min_alert, forecast_alerts = excluded.forecast_alerts`,
+            [a.id, sub.id, position, a.label, a.lon, a.lat, a.radiusKm, a.hazards, a.minAlert, a.forecastAlerts === true],
           )
           const entries = Object.entries(a.notified)
           if (!entries.length) continue

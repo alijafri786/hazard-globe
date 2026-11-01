@@ -39,6 +39,8 @@ export interface WatchArea {
   radiusKm: number
   hazards: HazardType[]
   minAlert: AlertLevel
+  /** also alert when a cyclone's forecast cone reaches the area */
+  forecastAlerts?: boolean
 }
 
 /** An area being added or edited: it has no centre until one is picked. */

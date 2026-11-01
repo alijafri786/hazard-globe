@@ -1,5 +1,7 @@
+import type { Geometry, Polygon } from 'geojson'
 import type {
   AlertLevel,
+  GdacsCollection,
   EmailChannel,
   GdacsEvent,
   GdacsEventProps,
@@ -37,6 +39,7 @@ export function makeArea(overrides: Partial<WatchArea> = {}): WatchArea {
     radiusKm: 100,
     hazards: ['TC', 'FL'],
     minAlert: 'Orange',
+    forecastAlerts: false,
     notified: {},
     ...overrides,
   }
@@ -86,6 +89,33 @@ export function square(lon: number, lat: number, half: number) {
         [lon - half, lat + half],
         [lon - half, lat - half],
       ],
+    ],
+  }
+}
+
+/** A small circle-ish polygon, as GDACS draws track points */
+export function ring(lon: number, lat: number, r = 0.1): Polygon {
+  const pts = Array.from({ length: 8 }, (_, i) => [lon + r * Math.cos((i * Math.PI) / 4), lat + r * Math.sin((i * Math.PI) / 4)])
+  return { type: 'Polygon', coordinates: [[...pts, pts[0]]] }
+}
+
+/** A GDACS-style cyclone geometry collection: wind buffers, centroid, track lines and points, cone */
+export function cycloneCollection({
+  issued = '2026-06-01T18:00:00',
+  wind = [square(10, 10, 1)] as Geometry[],
+  cone = square(0, 0, 1) as Polygon | null,
+  points = [] as { key: string; lon: number; lat: number }[],
+} = {}): GdacsCollection {
+  const feature = (geometry: Geometry, props: Record<string, unknown>) =>
+    ({ type: 'Feature', geometry, properties: { polygondate: issued, ...props } }) as unknown as GdacsCollection['features'][number]
+  return {
+    type: 'FeatureCollection',
+    features: [
+      feature({ type: 'Point', coordinates: [0, 0] }, { Class: 'Point_Centroid' }),
+      ...wind.map((g, i) => feature(g, { Class: ['Poly_Green', 'Poly_Orange', 'Poly_Red'][i % 3] })),
+      feature({ type: 'LineString', coordinates: [[0, 0], [1, 1]] }, { Class: 'Line_Line_0', forecast: true }),
+      ...points.map((p, i) => feature(ring(p.lon, p.lat), { Class: `Point_Polygon_Point_${i}`, key: p.key })),
+      ...(cone ? [feature(cone, { Class: 'Poly_Cones', polygonlabel: 'Uncertainty Cones' })] : []),
     ],
   }
 }

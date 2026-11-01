@@ -6,17 +6,22 @@ import {
   DistanceDisplayCondition,
   Entity,
   GeoJsonDataSource,
+  HeadingPitchRange,
+  Math as CesiumMath,
   HeightReference,
+  HorizontalOrigin,
   LabelStyle,
   NearFarScalar,
+  PolylineDashMaterialProperty,
   VerticalOrigin,
   type Viewer,
 } from 'cesium'
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } from 'vue'
 import { api } from '../services/api'
+import { splitCyclone, type GeoFeature } from '../services/cyclone'
 import { escapeHtml } from '../services/html'
 import { ALERT_COLOURS, type AlertLevel, type HazardEvent, type HazardType } from '../types'
-import type { useTimeline } from './useTimeline'
+import { formatDay, type useTimeline } from './useTimeline'
 
 const RANK: Record<AlertLevel, number> = { Red: 2, Orange: 1, Green: 0 }
 const HAZARD_OUTLINE: Record<HazardType, Color> = {
@@ -44,7 +49,12 @@ function describe(e: HazardEvent): string {
   const link = p.url?.report
     ? `<p><a href="${escapeHtml(p.url.report)}" target="_blank" rel="noopener">Full GDACS report ↗</a></p>`
     : ''
-  return `<table class="cesium-infoBox-defaultTable">${table}</table>${link}
+  const track =
+    p.eventtype === 'TC'
+      ? `<p style="font-size:13px">Track: solid where it has been, dashed where it is forecast to go. The dashed white
+        cone is where its centre is likely to go, not how big the storm is.</p>`
+      : ''
+  return `<table class="cesium-infoBox-defaultTable">${table}</table>${track}${link}
     <p style="opacity:.7;font-size:12px">Source: GDACS. Not an official warning — follow your national weather service.</p>`
 }
 
@@ -59,6 +69,7 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
 
   const points = new CustomDataSource('gdacs-events')
   let footprint: GeoJsonDataSource | null = null
+  let forecast: CustomDataSource | null = null
 
   /** Its hazard type is switched on, and it was active on the timeline's day */
   const shown = (e: HazardEvent) => visible.value[e.properties.eventtype] && timeline.shows(e)
@@ -111,28 +122,74 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
     viewer.value?.scene.requestRender()
   }
 
+  /** A cyclone's track and forecast cone, drawn apart from its wind area so neither reads as the other */
+  function drawForecast(parts: ReturnType<typeof splitCyclone>): CustomDataSource {
+    const source = new CustomDataSource('cyclone-forecast')
+    const positions = (coords: number[][]) => Cartesian3.fromDegreesArray(coords.flat())
+    const dashed = new PolylineDashMaterialProperty({ color: Color.WHITE, dashLength: 14 })
+    if (parts.cone) {
+      source.entities.add({
+        polygon: { hierarchy: positions(parts.cone), material: Color.WHITE.withAlpha(0.07) },
+        polyline: { positions: positions(parts.cone), width: 2, material: dashed, clampToGround: true },
+      })
+    }
+    for (const line of parts.track) {
+      source.entities.add({
+        polyline: {
+          positions: positions(line.coords),
+          width: 2,
+          clampToGround: true,
+          material: line.forecast ? dashed : Color.WHITE,
+        },
+      })
+    }
+    for (const point of parts.forecastPoints) {
+      const hour = new Date(point.time).getUTCHours().toString().padStart(2, '0')
+      source.entities.add({
+        position: Cartesian3.fromDegrees(point.lon, point.lat),
+        point: {
+          pixelSize: 6,
+          color: Color.WHITE,
+          outlineColor: Color.BLACK,
+          outlineWidth: 1,
+          heightReference: HeightReference.CLAMP_TO_GROUND,
+        },
+        label: {
+          text: `${formatDay(point.time)} ${hour}:00 UTC`,
+          font: '11px system-ui, sans-serif',
+          style: LabelStyle.FILL_AND_OUTLINE,
+          outlineWidth: 3,
+          outlineColor: Color.BLACK,
+          horizontalOrigin: HorizontalOrigin.LEFT,
+          pixelOffset: new Cartesian2(8, 0),
+          distanceDisplayCondition: new DistanceDisplayCondition(0, 5e6),
+        },
+      })
+    }
+    return source
+  }
+
   async function showFootprint(e: HazardEvent | null) {
     const v = viewer.value
     if (!v) return
-    if (footprint) {
-      v.dataSources.remove(footprint, true)
-      footprint = null
-    }
+    for (const source of [footprint, forecast]) if (source) v.dataSources.remove(source, true)
+    footprint = forecast = null
     if (!e) return v.scene.requestRender()
     const p = e.properties
     try {
       const fc = await api.geometry(p.eventtype, p.eventid, p.episodeid)
       if (!fc.features.length) return
+      // The cone, track and centroid are not the area hit: drawn separately, or (the centroid) not at all
+      const parts = splitCyclone(fc.features as GeoFeature[], p.eventtype)
       const colour = Color.fromCssColorString(ALERT_COLOURS[p.alertlevel])
-      footprint = await GeoJsonDataSource.load(fc, {
-        stroke: colour,
-        fill: colour.withAlpha(0.18),
-        strokeWidth: 2,
-        clampToGround: true,
-      })
-      // GDACS includes its own centroid points in the geometry; we already draw those.
+      footprint = await GeoJsonDataSource.load(
+        { type: 'FeatureCollection', features: parts.area },
+        { stroke: colour, fill: colour.withAlpha(0.18), strokeWidth: 2, clampToGround: true },
+      )
+      // Flood geometry includes GDACS's own centroid point; we already draw a marker there
       for (const ent of footprint.entities.values) if (ent.billboard) ent.show = false
       await v.dataSources.add(footprint)
+      if (p.eventtype === 'TC') await v.dataSources.add((forecast = drawForecast(parts)))
       v.scene.requestRender()
     } catch {
       /* footprints are a nice-to-have; ignore failures */
@@ -164,7 +221,8 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
     const entity = points.entities.getById(`${e.properties.eventtype}-${e.properties.eventid}`)
     if (!v || !entity) return
     v.selectedEntity = entity
-    void v.flyTo(entity, { duration: 1.6 })
+    // From high enough above to take in a storm's track and cone, not just the marker
+    void v.flyTo(entity, { duration: 1.6, offset: new HeadingPitchRange(0, CesiumMath.toRadians(-90), 2.5e6) })
   }
 
   watch(

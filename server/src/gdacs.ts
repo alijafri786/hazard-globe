@@ -1,4 +1,3 @@
-import type { Geometry } from 'geojson'
 import { config } from './config.js'
 import type { AlertLevel, GdacsCollection, GdacsEvent, HazardType } from './types.js'
 
@@ -92,13 +91,4 @@ export async function fetchGeometryCollection(
     if (geometryCache.size > GEOMETRY_CACHE_SIZE) geometryCache.delete(geometryCache.keys().next().value as string)
   }
   return data
-}
-
-export async function fetchEventGeometry(
-  eventtype: HazardType,
-  eventid: number,
-  episodeid: number,
-): Promise<Geometry[]> {
-  const data = await fetchGeometryCollection(eventtype, eventid, episodeid)
-  return (data?.features ?? []).map((f) => f.geometry).filter((g): g is Geometry => Boolean(g))
 }

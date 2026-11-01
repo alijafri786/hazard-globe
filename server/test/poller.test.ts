@@ -4,7 +4,7 @@ import type { SubscriptionStore } from '../src/store/index.js'
 import type { Subscription } from '../src/types.js'
 import { emailChannel, makeEvent, makeSub, pushChannel } from './fixtures.js'
 
-const gdacs = vi.hoisted(() => ({ fetchEvents: vi.fn(), fetchEventGeometry: vi.fn() }))
+const gdacs = vi.hoisted(() => ({ fetchEvents: vi.fn(), fetchGeometryCollection: vi.fn() }))
 vi.mock('../src/gdacs.js', () => gdacs)
 
 const { createPoller } = await import('../src/poller.js')
@@ -29,7 +29,7 @@ const sent: Delivery = { results: { push: 'sent' }, gone: [] }
 beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => undefined)
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
-  gdacs.fetchEventGeometry.mockResolvedValue([])
+  gdacs.fetchGeometryCollection.mockResolvedValue(null)
   gdacs.fetchEvents.mockResolvedValue({
     type: 'FeatureCollection',
     features: [makeEvent({ eventid: 1 }), makeEvent({ eventid: 2, alertlevel: 'Red' })],
@@ -86,7 +86,7 @@ describe('poller', () => {
     await createPoller(store, delivering(() => sent)).pollOnce()
 
     const [active, cutoff] = vi.mocked(store.pruneNotified).mock.calls[0]
-    expect([...active]).toEqual(['TC-1', 'TC-2'])
+    expect([...active]).toEqual(['TC-1', 'TC-1:cone', 'TC-2', 'TC-2:cone'])
     expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(30 * 86_400_000 - 1000)
   })
 

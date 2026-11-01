@@ -60,7 +60,7 @@ describe.each(backends)('%s store', (_, open) => {
       createdAt: '2026-02-03T04:05:06.789Z',
       areas: [
         makeArea({ id: 'x', label: 'Home', lon: -0.12, lat: 51.5, radiusKm: 75, notified: alerted('TC-1', 'Red') }),
-        makeArea({ id: 'y', label: "Mum's", hazards: ['FL'], minAlert: 'Green' }),
+        makeArea({ id: 'y', label: "Mum's", hazards: ['FL'], minAlert: 'Green', forecastAlerts: true }),
       ],
     })
     await (await open()).upsert(sub)
@@ -213,7 +213,7 @@ describe('postgres store', () => {
   it('applies each migration once', async () => {
     expect(await migrate(db)).toEqual([])
     const { rows } = await db.query<{ name: string }>('select name from schema_migrations')
-    expect(rows.map((r) => r.name)).toEqual(['001_init.sql', '002_email_telegram.sql'])
+    expect(rows.map((r) => r.name)).toEqual(['001_init.sql', '002_email_telegram.sql', '003_forecast_alerts.sql'])
   })
 
   it('keeps an alert recorded while the user was editing', async () => {

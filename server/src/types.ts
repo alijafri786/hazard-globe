@@ -35,7 +35,12 @@ export interface WatchArea {
   radiusKm: number
   hazards: HazardType[]
   minAlert: AlertLevel
-  /** eventKey -> highest alert level already sent for this area, so we only re-alert on escalation */
+  /** Also alert when a cyclone's forecast cone reaches the area, before its winds do. Opt-in. */
+  forecastAlerts: boolean
+  /**
+   * eventKey -> highest alert level already sent for this area, so we only re-alert on escalation.
+   * Forecast-cone alerts are recorded under `${eventKey}:cone`.
+   */
   notified: Record<string, { level: AlertLevel; at: string }>
 }
 

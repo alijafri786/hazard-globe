@@ -1,10 +1,12 @@
-import type { Geometry } from 'geojson'
+import type { Geometry, Polygon } from 'geojson'
 import { describe, expect, it, vi } from 'vitest'
 import { planAlerts } from '../src/alerts.js'
+import { splitGeometry, type EventDetails } from '../src/forecast.js'
 import type { AlertLevel, GdacsEvent } from '../src/types.js'
-import { alerted, makeArea, makeEvent, makeSub, square } from './fixtures.js'
+import { alerted, cycloneCollection, makeArea, makeEvent, makeSub, square } from './fixtures.js'
 
-const noGeometry = async () => [] as Geometry[]
+const details = (affected: Geometry[] = []): EventDetails => ({ affected, forecast: null })
+const noGeometry = async () => details()
 
 describe('planAlerts', () => {
   it('alerts a subscriber about a new event in their area', async () => {
@@ -75,14 +77,14 @@ describe('planAlerts', () => {
     const alerts = await planAlerts(
       [pointFarFootprintNear, pointNearFootprintFar],
       [makeSub()],
-      async (e) => footprints[e.properties.eventid],
+      async (e) => details(footprints[e.properties.eventid]),
     )
     expect(alerts.map((a) => a.eventKey)).toEqual(['TC-1000'])
   })
 
   it('treats malformed geometry as no match instead of throwing', async () => {
     const broken = { type: 'Polygon', coordinates: [[['x', 'y']]] } as unknown as Geometry
-    await expect(planAlerts([makeEvent()], [makeSub()], async () => [broken])).resolves.toEqual([])
+    await expect(planAlerts([makeEvent()], [makeSub()], async () => details([broken]))).resolves.toEqual([])
   })
 
   it('fetches geometry once per event however many subscribers want it', async () => {
@@ -125,5 +127,77 @@ describe('planAlerts', () => {
       expect(alerts[0].areaIds).toEqual(['work'])
       expect(alerts[0].payload.body).toBe('Alpha\nNear: Work')
     })
+  })
+})
+
+describe('forecast-cone alerts', () => {
+  // Winds far away, cone over the area at (0, 0), closest forecast position on Wed 3 Jun
+  const cyclone = (cone: Polygon | null = square(0, 0, 1), wind: Geometry[] = [square(10, 10, 1)]) => async () =>
+    splitGeometry(
+      cycloneCollection({
+        cone,
+        wind,
+        points: [
+          { key: '06011800', lon: 3, lat: 0 },
+          { key: '06021800', lon: 2, lat: 0 },
+          { key: '06030600', lon: 0.5, lat: 0 },
+          { key: '06031800', lon: -2, lat: 0 },
+        ],
+      }),
+      'TC',
+    )
+  const optedIn = (overrides = {}) => makeArea({ forecastAlerts: true, ...overrides })
+
+  it('alerts an opted-in area the cone reaches, separately from impact alerts', async () => {
+    const event = makeEvent({ country: 'Atlantis', url: { report: 'https://gdacs.example/r' } })
+    const [alert, ...rest] = await planAlerts([event], [makeSub({ areas: [optedIn()] })], cyclone())
+    expect(rest).toEqual([])
+    expect(alert).toMatchObject({ eventKey: 'TC-1000:cone', level: 'Orange', areaIds: ['area-1'] })
+    expect(alert.payload).toMatchObject({ title: 'Forecast: Tropical cyclone may reach Home', tag: 'TC-1000:cone', url: 'https://gdacs.example/r' })
+    expect(alert.payload.body).toContain('Alpha — Atlantis (Orange)')
+    expect(alert.payload.body).toContain('Its forecast cone reaches: Home')
+    expect(alert.payload.body).toContain('Closest: Home around Wed 3 Jun')
+    expect(alert.payload.body).toContain('Forecast issued 1 Jun')
+    expect(alert.payload.body).toContain("The cone shows the likely path of the storm's centre, not its size. Not an official warning.")
+  })
+
+  it('is opt-in, and only for cyclones', async () => {
+    expect(await planAlerts([makeEvent()], [makeSub()], cyclone())).toEqual([])
+    expect(await planAlerts([makeEvent({ eventtype: 'FL' })], [makeSub({ areas: [optedIn()] })], cyclone())).toEqual([])
+  })
+
+  it('no longer counts the cone as the area hit, so it alone never triggers an impact alert', async () => {
+    const alerts = await planAlerts([makeEvent()], [makeSub()], cyclone())
+    expect(alerts).toEqual([])
+  })
+
+  it('sends the impact alert instead when the winds reach the area too', async () => {
+    const alerts = await planAlerts([makeEvent()], [makeSub({ areas: [optedIn()] })], cyclone(square(0, 0, 1), [square(0, 0, 1)]))
+    expect(alerts.map((a) => a.eventKey)).toEqual(['TC-1000'])
+  })
+
+  it('stays quiet once the area has had the impact alert for that storm', async () => {
+    const area = optedIn({ notified: alerted('TC-1000', 'Orange') })
+    expect(await planAlerts([makeEvent()], [makeSub({ areas: [area] })], cyclone())).toEqual([])
+  })
+
+  it('alerts once per storm, and again only if its level rises', async () => {
+    const area = optedIn({ notified: alerted('TC-1000:cone', 'Orange') })
+    expect(await planAlerts([makeEvent()], [makeSub({ areas: [area] })], cyclone())).toEqual([])
+    const red = await planAlerts([makeEvent({ alertlevel: 'Red' })], [makeSub({ areas: [area] })], cyclone())
+    expect(red.map((a) => [a.eventKey, a.level])).toEqual([['TC-1000:cone', 'Red']])
+  })
+
+  it('respects the area’s minimum level, and needs a cone', async () => {
+    expect(await planAlerts([makeEvent()], [makeSub({ areas: [optedIn({ minAlert: 'Red' })] })], cyclone())).toEqual([])
+    expect(await planAlerts([makeEvent()], [makeSub({ areas: [optedIn()] })], cyclone(null))).toEqual([])
+  })
+
+  it('names every area the cone reaches in one alert', async () => {
+    const areas = [optedIn({ id: 'a', label: 'Home' }), optedIn({ id: 'b', label: 'Work', lon: -0.5 }), optedIn({ id: 'c', label: 'Far', lon: 40 })]
+    const [alert] = await planAlerts([makeEvent()], [makeSub({ areas })], cyclone())
+    expect(alert.areaIds).toEqual(['a', 'b'])
+    expect(alert.payload.title).toBe('Forecast: Tropical cyclone may reach your areas')
+    expect(alert.payload.body).toContain('Its forecast cone reaches: Home, Work')
   })
 })

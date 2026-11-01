@@ -31,7 +31,8 @@ async function run(task: () => Promise<string>) {
 function summary(a: WatchArea): string {
   const hazards = a.hazards.length === 2 ? 'Storms and floods' : a.hazards[0] === 'TC' ? 'Storms' : 'Floods'
   const level = { Green: 'all levels', Orange: 'orange and red', Red: 'red only' }[a.minAlert]
-  return `${a.radiusKm} km · ${hazards}, ${level}`
+  const cone = a.forecastAlerts && a.hazards.includes('TC') ? ' · forecast cones too' : ''
+  return `${a.radiusKm} km · ${hazards}, ${level}${cone}`
 }
 
 /** Saves a new list: on this device until alerts are on, then on the server, which assigns ids. */

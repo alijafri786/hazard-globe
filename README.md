@@ -2,7 +2,9 @@
 
 An open-source 3D globe of **tropical cyclones and floods** worldwide, with **alerts for the places you care about** — your home, your family abroad, a site you manage — by browser notification, email or Telegram.
 
-Add up to 10 watch areas: pick each point on the globe (or use your location), then choose a radius, the hazards and a minimum alert level. You get a notification when a storm or flood footprint touches one of them.
+Add up to 10 watch areas: pick each point on the globe (or use your location), then choose a radius, the hazards and a minimum alert level. You get a notification when a storm or flood footprint touches one of them. For cyclones, each area can also opt in to an earlier heads-up when a storm's **forecast cone** reaches it.
+
+Select a cyclone to see its track (solid where it has been, dashed where it's forecast to go, with times) and its forecast cone.
 
 Switch the Events tab to **History** to look back over the last 7, 30 or 90 days: drag the slider or press play to see which storms and floods were active on each day.
 
@@ -112,6 +114,8 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **iPhone/iPad:** web push only works after the site is added to the Home Screen (iOS 16.4+). Email and Telegram work anywhere.
 - **Channels:** a subscription can use any mix of browser, email and Telegram. If one stops working for good (browser permission revoked, mailbox rejected, bot blocked), it's removed; when none are left, so is the subscription.
 - **Alert logic:** each area is notified once per event, and again only if its alert level escalates (e.g. Orange → Red). When one event touches several of your areas, you get one notification naming them all. Moving an area's centre resets what it has already been told.
+- **What counts as a hit:** for a cyclone, the area its winds are expected to reach (GDACS's wind buffers), not its forecast cone or track.
+- **Forecast-cone alerts:** opt-in per area. They're sent once per storm when its cone reaches the area, and again only if the storm's alert level rises. They're recorded separately, so the alert when the winds reach the area still comes. No cone alert is sent once an area has had that alert. The message says roughly when the storm passes closest, and that a cone is where the storm's centre is likely to go, not how big it is. Cones come from GDACS, so they cover every ocean basin.
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
 - **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes. History offers three fixed ranges, each ending today, and the server fetches each from GDACS at most once every 15 minutes however many people are looking.
 - **History days** are UTC days, as GDACS dates are. An event shows on every day between its start and its latest update.
@@ -123,7 +127,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 
 ## Roadmap
 
-- [ ] Forecast cones from NOAA NHC / JTWC for cyclones
+- [x] Forecast cones for cyclones, with opt-in cone alerts (from GDACS, which covers every basin; NHC/JTWC cones could be added for official agency versions)
 - [x] Flood forecasts (Copernicus GloFAS), as a map overlay
 - [x] Multiple watch areas per device
 - [x] Email and Telegram delivery channels
