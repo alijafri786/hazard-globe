@@ -7,7 +7,7 @@ import { importJsonFile } from '../src/store/import.js'
 import type { SubscriptionStore } from '../src/store/index.js'
 import { openJsonStore } from '../src/store/json.js'
 import { openPostgresStore } from '../src/store/postgres.js'
-import { alerted, makeArea, makeSub } from './fixtures.js'
+import { alerted, emailChannel, makeArea, makeSub, pushChannel, telegramChannel } from './fixtures.js'
 import { pgliteDb } from './pglite.js'
 
 let dir: string
@@ -111,8 +111,8 @@ describe.each(backends)('%s store', (_, open) => {
     await store.upsert(makeSub({ id: 'a', area: { id: 'x', label: 'Old' } }))
     await store.upsert(makeSub({ id: 'a', area: { id: 'x', label: 'New' } }))
     expect(await store.count()).toBe(1)
-    expect((await store.findByEndpoint(endpoint(1)))?.areas[0].label).toBe('New')
-    expect(await store.findByEndpoint(endpoint('other'))).toBeUndefined()
+    expect((await store.findByChannel('push', endpoint(1))).map((s) => s.areas[0].label)).toEqual(['New'])
+    expect(await store.findByChannel('push', endpoint('other'))).toEqual([])
 
     expect(await store.remove('a')).toBe(true)
     expect(await store.remove('a')).toBe(false)
@@ -130,6 +130,34 @@ describe.each(backends)('%s store', (_, open) => {
     )
     await Promise.all(subs.map((s) => store.upsert(s)))
     expect(await (await open()).count()).toBe(25)
+  })
+
+  it('round-trips every kind of channel, pending or not', async () => {
+    const channels = [
+      pushChannel(),
+      emailChannel({ verified: false, token: 'e1' }),
+      telegramChannel({ chatId: undefined, token: 't1', linkExpiresAt: '2026-06-01T12:15:00.000Z' }),
+    ]
+    await (await open()).upsert(makeSub({ id: 'a', channels }))
+    expect((await (await open()).get('a'))!.channels).toEqual(channels)
+
+    const linked = [pushChannel(), emailChannel({ token: 'e1' }), telegramChannel({ chatId: '777', token: 't1' })]
+    await (await open()).upsert(makeSub({ id: 'a', channels: linked }))
+    expect((await (await open()).get('a'))!.channels).toEqual(linked)
+  })
+
+  it('finds subscriptions by email address or chat, shared or not, and by token', async () => {
+    const store = await open()
+    await store.upsert(makeSub({ id: 'a', channels: [pushChannel(1), emailChannel({ token: 'ea' }), telegramChannel({ token: 'ta' })] }))
+    await store.upsert(makeSub({ id: 'b', area: { id: 'b1' }, channels: [pushChannel(2), emailChannel({ token: 'eb' })] }))
+
+    const ids = async (p: Promise<{ id: string }[]>) => (await p).map((s) => s.id).sort()
+    expect(await ids(store.findByChannel('email', 'me@example.com'))).toEqual(['a', 'b'])
+    expect(await ids(store.findByChannel('telegram', '4242'))).toEqual(['a'])
+    expect(await ids(store.findByChannel('email', 'nobody@example.com'))).toEqual([])
+    expect((await store.findByToken('eb'))?.id).toBe('b')
+    expect((await store.findByToken('ta'))?.id).toBe('a')
+    expect(await store.findByToken('nope')).toBeUndefined()
   })
 
   it('forgets old alerts for events that are no longer active, and nothing else', async () => {
@@ -185,7 +213,7 @@ describe('postgres store', () => {
   it('applies each migration once', async () => {
     expect(await migrate(db)).toEqual([])
     const { rows } = await db.query<{ name: string }>('select name from schema_migrations')
-    expect(rows.map((r) => r.name)).toEqual(['001_init.sql'])
+    expect(rows.map((r) => r.name)).toEqual(['001_init.sql', '002_email_telegram.sql'])
   })
 
   it('keeps an alert recorded while the user was editing', async () => {
@@ -204,7 +232,7 @@ describe('postgres store', () => {
     const store = await openPostgresStore(db)
     await store.upsert(makeSub({ id: 'a', area: { id: 'x' } }))
     await store.upsert(makeSub({ id: 'b', area: { id: 'y' } }))
-    expect((await store.findByEndpoint(endpoint(1)))?.id).toBe('b')
+    expect((await store.findByChannel('push', endpoint(1))).map((s) => s.id)).toEqual(['b'])
     expect((await store.get('a'))!.channels).toEqual([])
   })
 

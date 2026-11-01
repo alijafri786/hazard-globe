@@ -45,8 +45,41 @@ export interface PushChannel {
   keys: { p256dh: string; auth: string }
 }
 
-/** Ways to reach a subscriber. Email and Telegram join this union later. */
-export type Channel = PushChannel
+/** Alerts go only to a confirmed address. `token` is the secret in its confirm and unsubscribe links. */
+export interface EmailChannel {
+  kind: 'email'
+  address: string
+  verified: boolean
+  token: string
+}
+
+/** Pending until someone opens the bot with `token` before `linkExpiresAt`; then it has a chat. */
+export interface TelegramChannel {
+  kind: 'telegram'
+  chatId?: string
+  token: string
+  linkExpiresAt?: string
+}
+
+/** Ways to reach a subscriber. */
+export type Channel = PushChannel | EmailChannel | TelegramChannel
+export type ChannelKind = Channel['kind']
+
+/** Whether alerts can go to this channel yet. */
+export const isActive = (ch: Channel): boolean =>
+  ch.kind === 'push' || (ch.kind === 'email' ? ch.verified : Boolean(ch.chatId))
+
+/** What identifies a channel among others of its kind: push endpoint, email address or chat id. */
+export function channelAddress(ch: Channel): string {
+  switch (ch.kind) {
+    case 'push':
+      return ch.endpoint
+    case 'email':
+      return ch.address
+    case 'telegram':
+      return ch.chatId ?? '' // pending: at most one per subscription
+  }
+}
 
 /** One device or person: where they want alerts for, and how to reach them. */
 export interface Subscription {
@@ -60,6 +93,8 @@ export interface Store {
   version: 2
   subscriptions: Subscription[]
 }
+
+export type SendResult = 'sent' | 'gone' | 'failed'
 
 export interface AlertPayload {
   title: string

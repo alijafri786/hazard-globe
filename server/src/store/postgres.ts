@@ -1,4 +1,4 @@
-import type { AlertLevel, Channel, HazardType, Subscription, WatchArea } from '../types.js'
+import { channelAddress, type AlertLevel, type Channel, type HazardType, type Subscription, type WatchArea } from '../types.js'
 import { migrate, type Db, type Queryable } from './db.js'
 import type { SubscriptionStore } from './index.js'
 
@@ -27,17 +27,31 @@ interface NotifiedRow {
   at: Date
 }
 
-function toChannelRow(ch: Channel): [kind: string, address: string, data: string] {
+/** `address` is `channelAddress(ch)`; everything else about the channel goes in `data`. */
+function channelData(ch: Channel): Record<string, unknown> {
   switch (ch.kind) {
     case 'push':
-      return ['push', ch.endpoint, JSON.stringify({ keys: ch.keys })]
+      return { keys: ch.keys }
+    case 'email':
+      return { verified: ch.verified, token: ch.token }
+    case 'telegram':
+      return { token: ch.token, ...(ch.linkExpiresAt && { linkExpiresAt: ch.linkExpiresAt }) }
   }
 }
 
-function fromChannelRow(row: ChannelRow): Channel | null {
-  switch (row.kind) {
+function fromChannelRow({ kind, address, data }: ChannelRow): Channel | null {
+  switch (kind) {
     case 'push':
-      return { kind: 'push', endpoint: row.address, keys: row.data.keys as { p256dh: string; auth: string } }
+      return { kind, endpoint: address, keys: data.keys as { p256dh: string; auth: string } }
+    case 'email':
+      return { kind, address, verified: data.verified === true, token: String(data.token) }
+    case 'telegram':
+      return {
+        kind,
+        ...(address && { chatId: address }),
+        token: String(data.token),
+        ...(typeof data.linkExpiresAt === 'string' && { linkExpiresAt: data.linkExpiresAt }),
+      }
     default:
       return null // a kind this version doesn't know, e.g. after a rollback
   }
@@ -98,13 +112,11 @@ export async function openPostgresStore(db: Db): Promise<SubscriptionStore> {
 
     get: async (id) => (await load(db, 'where id = $1', [id]))[0],
 
-    async findByEndpoint(endpoint) {
-      const { rows } = await db.query<{ subscription_id: string }>(
-        `select subscription_id from channels where kind = 'push' and address = $1`,
-        [endpoint],
-      )
-      return rows[0] ? (await load(db, 'where id = $1', [rows[0].subscription_id]))[0] : undefined
-    },
+    findByChannel: (kind, address) =>
+      load(db, 'where id in (select subscription_id from channels where kind = $1 and address = $2)', [kind, address]),
+
+    findByToken: async (token) =>
+      (await load(db, `where id in (select subscription_id from channels where data ->> 'token' = $1)`, [token]))[0],
 
     async count() {
       return (await db.query<{ n: number }>('select count(*)::int as n from subscriptions')).rows[0].n
@@ -124,10 +136,15 @@ export async function openPostgresStore(db: Db): Promise<SubscriptionStore> {
 
         await tx.query('delete from channels where subscription_id = $1', [sub.id])
         for (const ch of sub.channels) {
+          // A push endpoint moves to whichever subscription saved it last; other addresses may be shared
+          const onConflict =
+            ch.kind === 'push'
+              ? `on conflict (address) where kind = 'push'
+                 do update set subscription_id = excluded.subscription_id, data = excluded.data`
+              : ''
           await tx.query(
-            `insert into channels (subscription_id, kind, address, data) values ($1, $2, $3, $4::jsonb)
-             on conflict (kind, address) do update set subscription_id = excluded.subscription_id, data = excluded.data`,
-            [sub.id, ...toChannelRow(ch)],
+            `insert into channels (subscription_id, kind, address, data) values ($1, $2, $3, $4::jsonb) ${onConflict}`,
+            [sub.id, ch.kind, channelAddress(ch), JSON.stringify(channelData(ch))],
           )
         }
 

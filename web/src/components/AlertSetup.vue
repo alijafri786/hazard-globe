@@ -2,9 +2,10 @@
 import { computed, ref } from 'vue'
 import type { useWatchAreas } from '../composables/useWatchAreas'
 import { api } from '../services/api'
-import { dropPushSubscription, getPushSubscription, pushSupport } from '../services/push'
+import { pushSupport } from '../services/push'
 import { MAX_AREAS, type WatchArea } from '../types'
 import AreaEditor from './AreaEditor.vue'
+import ChannelSettings from './ChannelSettings.vue'
 
 const props = defineProps<{ watch: ReturnType<typeof useWatchAreas> }>()
 const { areas, subscriptionId, draft, editingIndex, expired, startAdd, startEdit, cancelEdit, withDraft, without } =
@@ -39,9 +40,7 @@ async function apply(next: WatchArea[]) {
     areas.value = next
     return
   }
-  const view = await api.subscribe({ id: subscriptionId.value, areas: next, push: await getPushSubscription() })
-  subscriptionId.value = view.id
-  areas.value = view.areas
+  props.watch.applyView(await api.subscribe({ id: subscriptionId.value, areas: next }))
 }
 
 const locate = () =>
@@ -69,33 +68,6 @@ const remove = (i: number) =>
     return `Removed ${label}.`
   })
 
-const subscribe = () =>
-  run(async () => {
-    if (!areas.value.length) throw new Error('Add an area first.')
-    const push = await getPushSubscription()
-    const view = await api.subscribe({ id: subscriptionId.value, areas: areas.value, push })
-    subscriptionId.value = view.id
-    areas.value = view.areas
-    expired.value = false
-    return 'Alerts turned on. Send a test to check they arrive.'
-  })
-
-const test = () =>
-  run(async () => {
-    if (!subscriptionId.value) throw new Error('Turn on alerts first.')
-    const { result } = await api.test(subscriptionId.value)
-    if (result !== 'sent') throw new Error('The server could not deliver a notification.')
-    return 'Test notification sent.'
-  })
-
-const unsubscribe = () =>
-  run(async () => {
-    if (subscriptionId.value) await api.unsubscribe(subscriptionId.value).catch(() => undefined)
-    await dropPushSubscription()
-    subscriptionId.value = undefined
-    areas.value = areas.value.map(({ id: _, ...a }) => a) // server ids mean nothing once it has forgotten us
-    return 'Alerts turned off. Your areas are kept on this device.'
-  })
 </script>
 
 <template>
@@ -140,24 +112,7 @@ const unsubscribe = () =>
     />
     <button v-else-if="!draft && areas.length < MAX_AREAS" :disabled="busy" @click="startAdd()">+ Add area</button>
 
-    <h3>Notifications</h3>
-    <p v-if="subscribed" class="on">
-      Alerts are on for {{ areas.length === 1 ? areas[0].label : `${areas.length} areas` }}.
-    </p>
-    <div class="row">
-      <button
-        v-if="!subscribed"
-        class="primary"
-        :disabled="busy || !!draft || !areas.length || support !== 'supported'"
-        @click="subscribe"
-      >
-        Turn on alerts
-      </button>
-      <template v-else>
-        <button :disabled="busy" @click="test">Send test</button>
-        <button class="danger" :disabled="busy" @click="unsubscribe">Turn off</button>
-      </template>
-    </div>
+    <ChannelSettings :watch="watch" :busy="busy" :support="support" :run="run" />
 
     <p v-if="status" class="status" :class="status.kind" role="status">{{ status.text }}</p>
   </section>
@@ -175,12 +130,6 @@ h3 {
 
 h3:first-of-type {
   margin-top: 0;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .areas {
@@ -235,8 +184,7 @@ h3:first-of-type {
   opacity: 0.4;
 }
 
-.empty,
-.on {
+.empty {
   font-size: 14px;
   color: var(--muted);
 }

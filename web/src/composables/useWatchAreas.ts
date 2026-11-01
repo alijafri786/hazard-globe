@@ -14,7 +14,7 @@ import {
 } from 'cesium'
 import { onBeforeUnmount, ref, toRaw, watch, type ShallowRef } from 'vue'
 import { api, ApiError } from '../services/api'
-import type { DraftArea, WatchArea } from '../types'
+import type { ChannelView, DraftArea, ServerChannels, SubscriptionView, WatchArea } from '../types'
 
 const STORAGE_KEY = 'hazard-globe:watch-areas'
 /** Earlier versions saved a single area here */
@@ -57,6 +57,10 @@ export function useWatchAreas(viewer: ShallowRef<Viewer | null>) {
   const picking = ref(false)
   /** The server no longer knows our subscription (expired or removed elsewhere) */
   const expired = ref(false)
+  /** How the server can reach us, as it last told us */
+  const channels = ref<ChannelView[]>([])
+  /** What the server offers; null until known or if it can't be reached */
+  const serverChannels = ref<ServerChannels | null>(null)
 
   let handler: ScreenSpaceEventHandler | null = null
   let drawn: Entity[] = []
@@ -191,25 +195,45 @@ export function useWatchAreas(viewer: ShallowRef<Viewer | null>) {
     v.camera.flyTo({ destination: Cartesian3.fromDegrees(a.lon, a.lat, a.radiusKm * 1000 * 6), duration: 1.4 })
   }
 
-  /** Bring the saved list in line with the server, which assigns ids and is the source of truth. */
+  /** Take on what the server says: it assigns ids and is the source of truth. */
+  function applyView(view: SubscriptionView) {
+    subscriptionId.value = view.id
+    areas.value = view.areas
+    channels.value = view.channels
+    expired.value = false
+  }
+
+  function forget() {
+    subscriptionId.value = undefined
+    channels.value = []
+    areas.value = areas.value.map(({ id: _, ...a }) => a) // server ids mean nothing once it has forgotten us
+  }
+
   async function refresh() {
     if (!subscriptionId.value) return
     try {
-      areas.value = (await api.subscription(subscriptionId.value)).areas
-      expired.value = false
+      applyView(await api.subscription(subscriptionId.value))
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        subscriptionId.value = undefined
+        forget()
         expired.value = true
       } // otherwise offline or server down: keep what we have
     }
   }
 
+  // Coming back from confirming an email or linking Telegram in another tab or app
+  const onVisible = () => document.visibilityState === 'visible' && void refresh()
+
   watch([areas, draft, editingIndex], draw, { deep: true })
   watch([areas, subscriptionId], persist, { deep: true })
   watch(viewer, (v) => v && draw(), { immediate: true })
-  onBeforeUnmount(() => handler?.destroy())
+  document.addEventListener('visibilitychange', onVisible)
+  onBeforeUnmount(() => {
+    handler?.destroy()
+    document.removeEventListener('visibilitychange', onVisible)
+  })
   void refresh()
+  api.channels().then((c) => (serverChannels.value = c), () => undefined)
 
   return {
     areas,
@@ -218,6 +242,11 @@ export function useWatchAreas(viewer: ShallowRef<Viewer | null>) {
     editingIndex,
     picking,
     expired,
+    channels,
+    serverChannels,
+    applyView,
+    forget,
+    refresh,
     startAdd,
     startEdit,
     cancelEdit,

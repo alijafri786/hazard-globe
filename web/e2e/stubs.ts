@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import type { Page } from '@playwright/test'
 
 /**
@@ -32,3 +33,22 @@ export async function stubHazardData(page: Page) {
 }
 
 export const STORAGE_KEY = 'hazard-globe:watch-areas'
+
+interface Mail {
+  to: string
+  subject: string
+  text: string
+  headers?: Record<string, string>
+}
+
+/** Mail the E2E server "sent", newest last. It writes to a file instead of an SMTP server. */
+export async function outbox(to: string): Promise<Mail[]> {
+  const text = await readFile(`${process.env.E2E_DATA_FILE}.outbox.jsonl`, 'utf8').catch(() => '')
+  return text
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Mail)
+    .filter((m) => m.to === to)
+}
+
+export const linkIn = (mail: Mail, path: string) => mail.text.match(new RegExp(`https?://\\S+${path}\\?token=[\\w-]+`))![0]

@@ -1,5 +1,17 @@
-import { randomUUID } from 'node:crypto'
-import { ALERT_RANK, MAX_AREAS, type AlertLevel, type HazardType, type PushChannel, type WatchArea } from './types.js'
+import { randomBytes, randomUUID } from 'node:crypto'
+import {
+  ALERT_RANK,
+  MAX_AREAS,
+  type AlertLevel,
+  type Channel,
+  type EmailChannel,
+  type HazardType,
+  type PushChannel,
+  type WatchArea,
+} from './types.js'
+
+/** URL-safe secret for confirm, unsubscribe and link URLs. 32 characters, within Telegram's 64 for /start. */
+export const newToken = () => randomBytes(24).toString('base64url')
 
 const isNumIn = (v: unknown, min: number, max: number): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
@@ -18,6 +30,57 @@ export function parsePushChannel(v: unknown): PushChannel | null {
   if (!isText(p?.endpoint, 2048) || !p.endpoint.startsWith('https://')) return null
   if (!isText(p.keys?.p256dh, 256) || !isText(p.keys?.auth, 256)) return null
   return { kind: 'push', endpoint: p.endpoint, keys: { p256dh: p.keys.p256dh, auth: p.keys.auth } }
+}
+
+/**
+ * Plain addresses only: no quotes, comments, groups or lists. Real addresses fit, and nothing a mail
+ * library's address parser could read as a second recipient gets through.
+ */
+const EMAIL = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/
+
+export function parseEmail(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const address = v.trim().toLowerCase()
+  return address.length <= 254 && EMAIL.test(address) ? address : null
+}
+
+/**
+ * Applies the channel fields of a request to the channels already stored. For `push` and `email`:
+ * absent keeps what's there, null removes it, a value sets it. A new or changed email address starts
+ * unconfirmed and is returned as `confirm`, so the caller can send the confirmation email. Telegram is
+ * linked through the bot instead, and kept as it is.
+ */
+export function mergeChannels(
+  existing: Channel[],
+  input: { push?: unknown; email?: unknown },
+): { channels: Channel[]; confirm?: EmailChannel } | null {
+  let channels = [...existing]
+  let confirm: EmailChannel | undefined
+
+  if (input.push !== undefined) {
+    channels = channels.filter((c) => c.kind !== 'push')
+    if (input.push !== null) {
+      const push = parsePushChannel(input.push)
+      if (!push) return null
+      channels.push(push)
+    }
+  }
+
+  if (input.email !== undefined) {
+    const current = channels.find((c) => c.kind === 'email')
+    if (input.email === null) {
+      channels = channels.filter((c) => c.kind !== 'email')
+    } else {
+      const address = parseEmail(input.email)
+      if (!address) return null
+      if (current?.address !== address) {
+        confirm = { kind: 'email', address, verified: false, token: newToken() }
+        channels = [...channels.filter((c) => c.kind !== 'email'), confirm]
+      }
+    }
+  }
+
+  return { channels, confirm }
 }
 
 /**

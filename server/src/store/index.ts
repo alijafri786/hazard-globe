@@ -1,5 +1,5 @@
 import { config } from '../config.js'
-import type { AlertLevel, Subscription } from '../types.js'
+import type { AlertLevel, ChannelKind, Subscription } from '../types.js'
 import { pgDb } from './db.js'
 import { openJsonStore } from './json.js'
 import { openPostgresStore } from './postgres.js'
@@ -11,7 +11,10 @@ import { openPostgresStore } from './postgres.js'
 export interface SubscriptionStore {
   list(): Promise<Subscription[]>
   get(id: string): Promise<Subscription | undefined>
-  findByEndpoint(endpoint: string): Promise<Subscription | undefined>
+  /** Subscriptions with a channel at this address (see `channelAddress`). A push endpoint is on one at most. */
+  findByChannel(kind: ChannelKind, address: string): Promise<Subscription[]>
+  /** The subscription with the email or Telegram channel holding this token. */
+  findByToken(token: string): Promise<Subscription | undefined>
   count(): Promise<number>
   upsert(sub: Subscription): Promise<void>
   remove(id: string): Promise<boolean>

@@ -1,4 +1,12 @@
-import type { EventsResponse, FlightsResponse, HazardType, SubscriptionView, WatchArea } from '../types'
+import type {
+  ChannelView,
+  EventsResponse,
+  FlightsResponse,
+  HazardType,
+  ServerChannels,
+  SubscriptionView,
+  WatchArea,
+} from '../types'
 
 const BASE = import.meta.env.VITE_API_BASE ?? ''
 
@@ -33,12 +41,26 @@ export const api = {
 
   publicKey: () => request<{ publicKey: string }>('/api/push/public-key'),
 
-  subscribe: (body: { id?: string; areas: WatchArea[]; push: PushSubscriptionJSON }) =>
+  channels: () => request<ServerChannels>('/api/channels'),
+
+  /** For `push` and `email`: leave out to keep what the server has, null to remove, a value to set. */
+  subscribe: (body: { id?: string; areas: WatchArea[]; push?: PushSubscriptionJSON | null; email?: string | null }) =>
     request<SubscriptionView>('/api/subscriptions', { method: 'POST', body: JSON.stringify(body) }),
 
   subscription: (id: string) => request<SubscriptionView>(`/api/subscriptions/${id}`),
 
-  test: (id: string) => request<{ result: string }>(`/api/subscriptions/${id}/test`, { method: 'POST' }),
+  resendEmail: (id: string) =>
+    request<Pick<SubscriptionView, 'emailConfirmation'>>(`/api/subscriptions/${id}/email/resend`, { method: 'POST' }),
+
+  connectTelegram: (id: string) => request<{ url: string }>(`/api/subscriptions/${id}/telegram`, { method: 'POST' }),
+
+  disconnectTelegram: (id: string) => request<void>(`/api/subscriptions/${id}/telegram`, { method: 'DELETE' }),
+
+  test: (id: string) =>
+    request<{ result: 'sent' | 'failed'; channels: Partial<Record<ChannelView['kind'], 'sent' | 'gone' | 'failed'>> }>(
+      `/api/subscriptions/${id}/test`,
+      { method: 'POST' },
+    ),
 
   unsubscribe: (id: string) => request<void>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
 }

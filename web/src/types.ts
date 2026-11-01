@@ -42,10 +42,24 @@ export interface WatchArea {
 /** An area being added or edited: it has no centre until one is picked. */
 export type DraftArea = Omit<WatchArea, 'lon' | 'lat'> & { lon?: number; lat?: number }
 
+export type ChannelView =
+  | { kind: 'push' }
+  | { kind: 'email'; address: string; verified: boolean }
+  | { kind: 'telegram'; linked: boolean }
+
 export interface SubscriptionView {
   id: string
   areas: (WatchArea & { id: string })[]
-  channels: { kind: string }[]
+  channels: ChannelView[]
+  /** set when the request added an email address */
+  emailConfirmation?: 'sent' | 'limited' | 'failed'
+}
+
+/** Which ways of being notified the server offers */
+export interface ServerChannels {
+  push: boolean
+  email: boolean
+  telegram: { bot: string } | null
 }
 
 /** [icao24, callsign, originCountry, lon, lat, altitudeM, velocityMs, trackDeg, verticalRateMs] */

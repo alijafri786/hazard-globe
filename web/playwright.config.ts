@@ -2,10 +2,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
-// Own ports and a fresh store each run, so tests never touch a running dev server or real subscriptions
+// Own ports and a fresh store each run, so tests never touch a running dev server or real subscriptions.
+// Set once in the environment: workers re-read this file, and must agree with the server on where mail goes.
 const API_PORT = 8788
 const WEB_PORT = 5174
-const dataFile = join(tmpdir(), `hazard-globe-e2e-${Date.now()}.json`)
+const dataFile = (process.env.E2E_DATA_FILE ??= join(tmpdir(), `hazard-globe-e2e-${Date.now()}.json`))
 
 export default defineConfig({
   testDir: 'e2e',
@@ -26,7 +27,7 @@ export default defineConfig({
       cwd: '../server',
       url: `http://localhost:${API_PORT}/api/health`,
       reuseExistingServer: false,
-      env: { E2E: '1', PORT: String(API_PORT), DATA_FILE: dataFile },
+      env: { E2E: '1', PORT: String(API_PORT), DATA_FILE: dataFile, PUBLIC_URL: `http://localhost:${WEB_PORT}` },
     },
     {
       command: `npx vite --port ${WEB_PORT} --strictPort`,

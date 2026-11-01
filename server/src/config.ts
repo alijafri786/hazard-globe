@@ -26,6 +26,15 @@ export const config = {
     privateKey: process.env.VAPID_PRIVATE_KEY ?? '',
     subject: process.env.VAPID_SUBJECT ?? 'mailto:maintainer@example.com',
   },
+  /** Where people reach the app; links in emails start here. Defaults to WEB_ORIGIN, which proxies /api in dev. */
+  publicUrl: (process.env.PUBLIC_URL || process.env.WEB_ORIGIN || 'http://localhost:5173').replace(/\/+$/, ''),
+  email: {
+    smtpUrl: process.env.SMTP_URL ?? '',
+    from: process.env.MAIL_FROM ?? '',
+  },
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
+  },
   opensky: {
     clientId: process.env.OPENSKY_CLIENT_ID ?? '',
     clientSecret: process.env.OPENSKY_CLIENT_SECRET ?? '',

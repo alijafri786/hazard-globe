@@ -19,36 +19,43 @@ export function clientIp(c: Context, trustProxy: number): string {
   }
 }
 
-interface RateLimitOptions {
+interface LimiterOptions {
   windowMs: number
   max: number
-  key: (c: Context) => string
   now?: () => number
 }
 
 /**
- * Fixed-window limiter kept in memory. Good enough for a single server; with several instances,
+ * Fixed-window counter kept in memory. Good enough for a single server; with several instances,
  * each one counts separately, so the effective limit is `max` times the instance count.
+ * Returns 0 when `key` is within its limit, otherwise the seconds until it can try again.
  */
-export function rateLimit({ windowMs, max, key, now = Date.now }: RateLimitOptions): MiddlewareHandler {
+export function createLimiter({ windowMs, max, now = Date.now }: LimiterOptions): (key: string) => number {
   const windows = new Map<string, { count: number; resetAt: number }>()
   let lastSweep = now()
 
-  return async (c, next) => {
+  return (key) => {
     const t = now()
     if (t - lastSweep > windowMs) {
       for (const [k, w] of windows) if (t >= w.resetAt) windows.delete(k)
       lastSweep = t
     }
 
-    const k = key(c)
-    let w = windows.get(k)
+    let w = windows.get(key)
     if (!w || t >= w.resetAt) {
       w = { count: 0, resetAt: t + windowMs }
-      windows.set(k, w)
+      windows.set(key, w)
     }
-    if (++w.count > max) {
-      c.header('Retry-After', String(Math.ceil((w.resetAt - t) / 1000)))
+    return ++w.count > max ? Math.ceil((w.resetAt - t) / 1000) : 0
+  }
+}
+
+export function rateLimit({ key, ...options }: LimiterOptions & { key: (c: Context) => string }): MiddlewareHandler {
+  const limit = createLimiter(options)
+  return async (c, next) => {
+    const retryAfter = limit(key(c))
+    if (retryAfter) {
+      c.header('Retry-After', String(retryAfter))
       return c.json({ error: 'Too many requests, try again later' }, 429)
     }
     await next()

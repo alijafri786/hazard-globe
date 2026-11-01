@@ -1,6 +1,6 @@
 # Hazard Globe
 
-An open-source 3D globe of **tropical cyclones and floods** worldwide, with **push alerts for the places you care about** — your home, your family abroad, a site you manage.
+An open-source 3D globe of **tropical cyclones and floods** worldwide, with **alerts for the places you care about** — your home, your family abroad, a site you manage — by browser notification, email or Telegram.
 
 Add up to 10 watch areas: pick each point on the globe (or use your location), then choose a radius, the hazards and a minimum alert level. You get a notification when a storm or flood footprint touches one of them.
 
@@ -15,7 +15,7 @@ GDACS API ──(poll every 15 min)──▶ server ──▶ /api/events ──
                                      │
                                      ├─ fetches affected-area polygons for relevant events
                                      ├─ intersects them with each subscriber's watch circle (Turf.js)
-                                     └─ sends Web Push (VAPID) on new or escalated alerts
+                                     └─ sends Web Push, email or Telegram on new or escalated alerts
 
 OpenSky API ──(on demand, cached)──▶ server ──▶ /api/flights ──▶ web (flights layer)
 ```
@@ -54,6 +54,28 @@ VITE_CESIUM_ION_TOKEN=your-token
 
 Each deployment should use its own token — never commit one.
 
+### Optional: email alerts
+
+Set an SMTP server in `server/.env` (any provider works) and the app offers email as well as browser notifications:
+
+```
+SMTP_URL=smtps://user:password@smtp.example.org:465
+MAIL_FROM="Hazard Globe <alerts@example.org>"
+PUBLIC_URL=https://your-site.example   # where links in emails point; defaults to WEB_ORIGIN
+```
+
+Every address gets a confirmation email first, and nothing else until it's confirmed; an address gets at most 3 confirmation emails an hour. Alert emails carry a one-click unsubscribe link (RFC 8058), which mail apps show as their own Unsubscribe button. Links in emails open a page with a button rather than acting straight away, so mail scanners that visit links can't confirm or unsubscribe anyone.
+
+### Optional: Telegram alerts
+
+Create a bot with [@BotFather](https://t.me/BotFather) and add its token to `server/.env`:
+
+```
+TELEGRAM_BOT_TOKEN=123456:ABC-your-bot-token
+```
+
+In My alerts, **Connect** gives a link that opens the bot. Pressing Start there links that chat; the link works for 15 minutes. Sending `/stop` to the bot disconnects it. The server long-polls Telegram, so it needs no public URL. Only one server instance should have the token set, because Telegram delivers a bot's messages to one process at a time.
+
 ### Optional: Postgres
 
 Subscriptions live in a JSON file by default. For more than a few hundred subscribers, or more than one server instance, point the server at Postgres in `server/.env`. Tables are created and migrated on startup:
@@ -83,7 +105,8 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 
 ## Notes and limits
 
-- **iPhone/iPad:** web push only works after the site is added to the Home Screen (iOS 16.4+).
+- **iPhone/iPad:** web push only works after the site is added to the Home Screen (iOS 16.4+). Email and Telegram work anywhere.
+- **Channels:** a subscription can use any mix of browser, email and Telegram. If one stops working for good (browser permission revoked, mailbox rejected, bot blocked), it's removed; when none are left, so is the subscription.
 - **Alert logic:** each area is notified once per event, and again only if its alert level escalates (e.g. Orange → Red). When one event touches several of your areas, you get one notification naming them all. Moving an area's centre resets what it has already been told.
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
 - **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes.
@@ -97,7 +120,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - [ ] Forecast cones from NOAA NHC / JTWC for cyclones
 - [ ] Flood forecasts (Copernicus GloFAS) — check licence terms before redistributing
 - [x] Multiple watch areas per device
-- [ ] Email and Telegram delivery channels
+- [x] Email and Telegram delivery channels
 - [ ] Time slider for event history
 - [x] Rate limiting
 - [x] Postgres store

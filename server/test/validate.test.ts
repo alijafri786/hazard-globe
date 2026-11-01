@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_AREAS } from '../src/types.js'
-import { parseAreas, parsePushChannel } from '../src/validate.js'
-import { alerted, makeArea } from './fixtures.js'
+import { mergeChannels, parseAreas, parseEmail, parsePushChannel } from '../src/validate.js'
+import { alerted, emailChannel, makeArea, pushChannel, telegramChannel } from './fixtures.js'
 
 const input = (extra: object = {}) => ({ label: 'Home', lon: 1, lat: 2, radiusKm: 100, ...extra })
 
@@ -85,5 +85,60 @@ describe('parsePushChannel', () => {
     ['nothing at all', undefined],
   ])('rejects %s', (_, value) => {
     expect(parsePushChannel(value)).toBeNull()
+  })
+})
+
+describe('parseEmail', () => {
+  it('accepts a plausible address, trimmed and lower-cased', () => {
+    expect(parseEmail('  Me.Too+alerts@Example.CO.uk ')).toBe('me.too+alerts@example.co.uk')
+  })
+
+  it.each([
+    ['no-at-sign'],
+    ['a@b'],
+    ['two words@example.com'],
+    ['<script>@x.com'],
+    [`${'a'.repeat(250)}@x.com`],
+    [42],
+    // shapes that address parsers have been tricked into reading as extra recipients
+    ['me@example.com,them@evil.test'],
+    ['me;them@evil.test'],
+    ['(comment)me@example.com'],
+    ['"me>"@evil.test'],
+    ['me@exa_mple.com'],
+  ])('rejects %s', (v) => expect(parseEmail(v)).toBeNull())
+})
+
+describe('mergeChannels', () => {
+  const push = { endpoint: 'https://push.example/new', keys: { p256dh: 'p', auth: 'a' } }
+
+  it('keeps channels the request does not mention', () => {
+    const existing = [pushChannel(), emailChannel(), telegramChannel()]
+    expect(mergeChannels(existing, {})).toEqual({ channels: existing })
+  })
+
+  it('replaces or removes push', () => {
+    expect(mergeChannels([pushChannel(), emailChannel()], { push })!.channels).toEqual([emailChannel(), { kind: 'push', ...push }])
+    expect(mergeChannels([pushChannel(), emailChannel()], { push: null })!.channels).toEqual([emailChannel()])
+    expect(mergeChannels([], { push: { endpoint: 'nope' } })).toBeNull()
+  })
+
+  it('adds a new address unconfirmed, with a fresh token, and asks for confirmation', () => {
+    const { channels, confirm } = mergeChannels([pushChannel()], { email: 'me@example.com' })!
+    expect(confirm).toEqual({ kind: 'email', address: 'me@example.com', verified: false, token: expect.stringMatching(/^[\w-]{32}$/) })
+    expect(channels).toEqual([pushChannel(), confirm])
+  })
+
+  it('keeps the same address as it is, confirmed or not', () => {
+    const existing = [emailChannel({ verified: true })]
+    expect(mergeChannels(existing, { email: 'ME@example.com' })).toEqual({ channels: existing })
+  })
+
+  it('replaces a changed address, and removes it on null', () => {
+    const changed = mergeChannels([emailChannel()], { email: 'new@example.com' })!
+    expect(changed.channels).toEqual([changed.confirm])
+    expect(changed.confirm?.token).not.toBe('email-token')
+    expect(mergeChannels([emailChannel(), telegramChannel()], { email: null })!.channels).toEqual([telegramChannel()])
+    expect(mergeChannels([], { email: 'nope' })).toBeNull()
   })
 })

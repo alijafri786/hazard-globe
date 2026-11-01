@@ -1,4 +1,32 @@
-import type { AlertLevel, GdacsEvent, GdacsEventProps, Subscription, WatchArea } from '../src/types.js'
+import type {
+  AlertLevel,
+  EmailChannel,
+  GdacsEvent,
+  GdacsEventProps,
+  PushChannel,
+  Subscription,
+  TelegramChannel,
+  WatchArea,
+} from '../src/types.js'
+
+export const pushChannel = (n: number | string = 1): PushChannel => ({
+  kind: 'push',
+  endpoint: `https://push.example/${n}`,
+  keys: { p256dh: 'p', auth: 'a' },
+})
+export const emailChannel = (overrides: Partial<EmailChannel> = {}): EmailChannel => ({
+  kind: 'email',
+  address: 'me@example.com',
+  verified: true,
+  token: 'email-token',
+  ...overrides,
+})
+export const telegramChannel = (overrides: Partial<TelegramChannel> = {}): TelegramChannel => ({
+  kind: 'telegram',
+  chatId: '4242',
+  token: 'telegram-token',
+  ...overrides,
+})
 
 export function makeArea(overrides: Partial<WatchArea> = {}): WatchArea {
   return {
@@ -22,7 +50,7 @@ export function makeSub(
   return {
     id: 'sub-1',
     createdAt: '2026-01-01T00:00:00.000Z',
-    channels: [{ kind: 'push', endpoint: 'https://push.example/1', keys: { p256dh: 'p', auth: 'a' } }],
+    channels: [pushChannel()],
     areas: areas ?? [makeArea(area)],
     ...rest,
   }

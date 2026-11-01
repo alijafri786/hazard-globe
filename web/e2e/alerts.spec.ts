@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { STORAGE_KEY, stubHazardData, stubPush } from './stubs'
+import { linkIn, outbox, STORAGE_KEY, stubHazardData, stubPush } from './stubs'
 
 interface View {
   id: string
@@ -50,7 +50,7 @@ test('add several areas, turn alerts on, edit, reload and turn off', async ({ pa
   ])
 
   await page.getByRole('button', { name: 'Send test' }).click()
-  await expect(status(page)).toHaveText('Test notification sent.')
+  await expect(status(page)).toHaveText('Test sent to this browser.')
 
   // Edits sync straight away once alerts are on, keeping the area's id
   await areaRow(page, 'Home').getByRole('button', { name: 'Edit' }).click()
@@ -70,7 +70,7 @@ test('add several areas, turn alerts on, edit, reload and turn off', async ({ pa
   await expect(areaRow(page, 'Home (London)').getByRole('button', { name: 'Remove' })).toBeDisabled() // last one
   expect(((await (await request.get(`/api/subscriptions/${id}`)).json()) as View).areas).toHaveLength(1)
 
-  await page.getByRole('button', { name: 'Turn off' }).click()
+  await page.getByRole('button', { name: 'Turn off all alerts' }).click()
   await expect(status(page)).toHaveText('Alerts turned off. Your areas are kept on this device.')
   expect((await request.get(`/api/subscriptions/${id}`)).status()).toBe(404)
   await expect(areaRow(page, 'Home (London)')).toBeVisible()
@@ -124,4 +124,50 @@ test('says so when the server has forgotten the subscription', async ({ page }) 
   await expect(page.getByText('Your alerts were switched off on the server.')).toBeVisible()
   await expect(areaRow(page, 'Gone')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Turn on alerts' })).toBeEnabled()
+})
+
+test('email alerts: confirm from the email, test, then one-click unsubscribe', async ({ page, context }) => {
+  const address = `e2e-${Date.now()}@example.com`
+  await stubPush(page, 'https://push.example/e2e-email')
+  await stubHazardData(page)
+  await openAlerts(page)
+  await addArea(page, 'Home')
+
+  await page.getByLabel('Notifications in this browser').uncheck()
+  await page.getByLabel('Email', { exact: true }).check()
+  await page.getByLabel('Email address').fill(address)
+  await page.getByRole('button', { name: 'Turn on alerts' }).click()
+  await expect(status(page)).toHaveText('Alerts turned on. Check your inbox to confirm your email address.')
+  await expect(page.getByRole('listitem').filter({ hasText: address })).toContainText('Waiting for you to confirm')
+  await expect(page.getByText('Nowhere to send alerts yet')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Send test' })).toBeDisabled()
+
+  // Confirm in another tab: the link only shows a button, so mail scanners can't confirm by visiting it
+  const [confirmation] = await outbox(address)
+  expect(confirmation.subject).toBe('Confirm your Hazard Globe email alerts')
+  const mailTab = await context.newPage()
+  await mailTab.goto(linkIn(confirmation, '/api/email/confirm'))
+  await expect(mailTab.getByRole('heading', { name: 'Confirm email alerts' })).toBeVisible()
+  await mailTab.getByRole('button', { name: 'Confirm' }).click()
+  await expect(mailTab.getByRole('heading', { name: 'Email alerts are on' })).toBeVisible()
+
+  // Back in the app, which refreshes when it becomes visible again
+  await page.bringToFront()
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(page.getByRole('listitem').filter({ hasText: address })).toContainText('Confirmed')
+  await page.getByRole('button', { name: 'Send test' }).click()
+  await expect(status(page)).toHaveText('Test sent to email.')
+
+  const testMail = (await outbox(address)).at(-1)!
+  expect(testMail.subject).toBe('Hazard Globe test alert')
+  expect(testMail.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+
+  await mailTab.goto(linkIn(testMail, '/api/email/unsubscribe'))
+  await mailTab.getByRole('button', { name: 'Stop email alerts' }).click()
+  await expect(mailTab.getByRole('heading', { name: 'Unsubscribed' })).toBeVisible()
+
+  // Email was its only channel, so the subscription is gone and the app says so
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(page.getByText('Your alerts were switched off on the server.')).toBeVisible()
+  await expect(areaRow(page, 'Home')).toBeVisible()
 })

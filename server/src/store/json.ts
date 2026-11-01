@@ -1,6 +1,6 @@
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { Store, Subscription } from '../types.js'
+import { channelAddress, type Store, type Subscription } from '../types.js'
 import type { SubscriptionStore } from './index.js'
 import { migrateStore } from './migrate.js'
 
@@ -60,8 +60,13 @@ export async function openJsonStore(file: string): Promise<SubscriptionStore> {
     async get(id) {
       return find(id)
     },
-    async findByEndpoint(endpoint) {
-      return store.subscriptions.find((s) => s.channels.some((ch) => ch.kind === 'push' && ch.endpoint === endpoint))
+    async findByChannel(kind, address) {
+      return store.subscriptions.filter((s) =>
+        s.channels.some((ch) => ch.kind === kind && channelAddress(ch) === address),
+      )
+    },
+    async findByToken(token) {
+      return store.subscriptions.find((s) => s.channels.some((ch) => ch.kind !== 'push' && ch.token === token))
     },
     async count() {
       return store.subscriptions.length
