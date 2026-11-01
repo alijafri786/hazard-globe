@@ -1,16 +1,9 @@
 import webpush from 'web-push'
 import { config, pushEnabled } from './config.js'
-import type { Subscription } from './types.js'
+import type { AlertPayload, Subscription } from './types.js'
 
 if (pushEnabled) {
   webpush.setVapidDetails(config.vapid.subject, config.vapid.publicKey, config.vapid.privateKey)
-}
-
-export interface AlertPayload {
-  title: string
-  body: string
-  url?: string
-  tag?: string
 }
 
 export type SendResult = 'sent' | 'gone' | 'failed'

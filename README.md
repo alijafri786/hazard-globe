@@ -32,6 +32,7 @@ npm install
 cp server/.env.example server/.env
 npm run vapid --workspace server   # paste the two keys into server/.env
 npm run dev                         # server on :8787, web on :5173
+npm test                            # server unit tests (Vitest)
 ```
 
 Open http://localhost:5173. Push notifications work on `localhost`; anywhere else they need HTTPS.

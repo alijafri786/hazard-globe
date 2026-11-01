@@ -8,8 +8,10 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "vapid": "web-push generate-vapid-keys"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
+    "vapid": "web-push generate-vapid-keys",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
@@ -24,6 +26,7 @@
     "@types/node": "^22.0.0",
     "@types/web-push": "^3.6.4",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.5"
   }
 }

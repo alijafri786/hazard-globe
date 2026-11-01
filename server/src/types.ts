@@ -50,6 +50,13 @@ export interface Store {
   subscriptions: Subscription[]
 }
 
+export interface AlertPayload {
+  title: string
+  body: string
+  url?: string
+  tag?: string
+}
+
 /**
  * One airborne aircraft, as a tuple to keep the global payload small (~10k aircraft):
  * [icao24, callsign, originCountry, lon, lat, altitudeM, velocityMs, trackDeg, verticalRateMs]
