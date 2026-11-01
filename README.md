@@ -14,6 +14,8 @@ Turn on the **flood forecast** overlay to see where rivers are forecast to rise 
 
 You can also switch on **live flights** to see aircraft worldwide, coloured by altitude, and search by callsign.
 
+**Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
+
 > ⚠️ **Not an official warning service.** Data comes from [GDACS](https://www.gdacs.org) and can be delayed, incomplete or wrong. Always follow your national meteorological and civil protection agencies.
 
 ## How it works
@@ -60,7 +62,7 @@ Create a free token at https://ion.cesium.com and add it to `web/.env.local`:
 VITE_CESIUM_ION_TOKEN=your-token
 ```
 
-Each deployment should use its own token — never commit one.
+Each deployment should use its own token — never commit one. With a token, search uses Cesium ion's geocoder, which also suggests places as you type.
 
 ### Optional: email alerts
 
@@ -125,6 +127,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Storage:** the JSON store is fine for a few hundred subscribers (capped by `MAX_SUBSCRIBERS`); beyond that, use Postgres (see above). Both sit behind the `SubscriptionStore` interface in `server/src/store/` and are tested against the same suite, with Postgres run in-process via PGlite. If the JSON file is ever corrupted, the server refuses to start rather than overwrite it.
 - **Abuse:** API routes are rate-limited per IP in memory (subscribing 20/hour, test alerts 5 per 10 minutes per subscription, footprint lookups 60/minute, everything else 300/minute). Behind a reverse proxy, set `TRUST_PROXY` so limits see real client IPs. With several server instances, each counts separately.
 - **Flights:** the server only calls OpenSky while someone has the layer switched on, and shares one cached snapshot between all visitors, so it stays inside OpenSky's daily credit limit. Between snapshots, planes are moved along their last reported heading, so positions are approximate. Aircraft on the ground are left out.
+- **Search:** without a Cesium ion token, place names are looked up by OpenStreetMap's public [Nominatim](https://nominatim.org) service, straight from the browser. Its [usage policy](https://operations.osmfoundation.org/policies/nominatim/) rules out searching as you type, so it searches when you press Enter; each browser makes at most one request a second and remembers recent answers. Typed coordinates never leave the browser. For heavy use, point a deployment at its own Nominatim instance or use an ion token.
 - **OpenSky terms:** OpenSky data is free for research and non-commercial use. Check the terms of use on [opensky-network.org](https://opensky-network.org) before deploying commercially.
 
 ## Roadmap
@@ -144,6 +147,6 @@ Issues and PRs welcome. Please keep the "not an official warning" disclaimer vis
 
 ## Licence
 
-MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network.
+MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network. Place search © OpenStreetMap contributors (ODbL), shown on screen with each result.
 
 Flood forecasts: generated using Copernicus Emergency Management Service information, from [GloFAS](https://global-flood.emergency.copernicus.eu). They're shown under the [CEMS-FLOODS licence](https://ewds.climate.copernicus.eu/licences/cems-floods). It allows distribution and communication to the public, provided this credit is shown (the app shows it with the overlay, and on the map). The licence says the data is for information purposes only, is not a flood warning, and comes without warranty. The app shows the public layers unmodified. Before a commercial deployment, check the current terms: the licence doesn't address commercial use explicitly, and Copernicus moved some data stores to CC BY 4.0 in 2025.

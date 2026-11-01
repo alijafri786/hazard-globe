@@ -8,6 +8,7 @@ import { useCameraControls } from './composables/useCameraControls'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
 import { useHazardLayer } from './composables/useHazardLayer'
+import { useSearchPin } from './composables/useSearchPin'
 import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
@@ -20,6 +21,7 @@ const forecast = useFloodForecastLayer(viewer, timeline)
 const flights = useFlightLayer(viewer)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
+useSearchPin(viewer)
 
 const panelOpen = ref(true)
 const tab = ref<'events' | 'flights' | 'alerts'>('events')

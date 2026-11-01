@@ -9,6 +9,7 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { onBeforeUnmount, onMounted, shallowRef, type Ref } from 'vue'
+import { CoordinateGeocoderService, LazyIonGeocoderService, NominatimGeocoderService } from '../services/geocoders'
 
 /**
  * Creates a Cesium Viewer that works with NO Cesium ion token (bundled Natural Earth imagery),
@@ -34,7 +35,11 @@ export function useViewer(container: Ref<HTMLElement | null>) {
       baseLayer,
       terrain: token ? Terrain.fromWorldTerrain() : undefined,
       baseLayerPicker: false,
-      geocoder: false,
+      // Coordinates first, so they're never sent off as a place name
+      geocoder: [
+        new CoordinateGeocoderService(),
+        token ? new LazyIonGeocoderService(() => viewer.value?.scene) : new NominatimGeocoderService(),
+      ],
       timeline: false,
       animation: false,
       navigationHelpButton: false,
@@ -44,6 +49,9 @@ export function useViewer(container: Ref<HTMLElement | null>) {
       infoBox: true,
       selectionIndicator: true,
     })
+
+    // Nominatim can't search as you type, and Cesium drops a search's credits whenever it tries to
+    if (!token) viewer.value.geocoder.viewModel.autoComplete = false
 
     const scene = viewer.value.scene
     scene.globe.enableLighting = false
