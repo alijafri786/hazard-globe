@@ -1,5 +1,7 @@
 # Hazard Globe
 
+[![CI](https://github.com/alijafri786/hazard-globe/actions/workflows/ci.yml/badge.svg)](https://github.com/alijafri786/hazard-globe/actions/workflows/ci.yml) [![MIT licence](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
 An open-source 3D globe of **tropical cyclones and floods** worldwide, with **alerts for the places you care about** — your home, your family abroad, a site you manage — by browser notification, email or Telegram.
 
 Add up to 10 watch areas: pick each point on the globe (or use your location), then choose a radius, the hazards and a minimum alert level. You get a notification when a storm or flood footprint touches one of them. For cyclones, each area can also opt in to an earlier heads-up when a storm's **forecast cone** reaches it.
