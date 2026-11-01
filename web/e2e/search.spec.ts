@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { stubHazardData } from './stubs'
+import { searchGlobe as search, stubHazardData, stubNominatim } from './stubs'
 
 const paris = {
   lat: '48.8534951',
@@ -8,32 +8,12 @@ const paris = {
   boundingbox: ['48.8155755', '48.9021560', '2.2241220', '2.4697602'],
 }
 
-async function stubNominatim(page: Page, { fail = false } = {}) {
-  const searches: URLSearchParams[] = []
-  await page.route('https://nominatim.openstreetmap.org/**', (route) => {
-    const q = new URL(route.request().url()).searchParams
-    searches.push(q)
-    if (fail) return route.fulfill({ status: 503 })
-    return route.fulfill({ json: q.get('q') === 'paris' ? [paris] : [] })
-  })
-  return searches
-}
-
 const searchBox = (page: Page) => page.locator('.cesium-geocoder-input')
 const pinTitle = (page: Page) => page.locator('.cesium-infoBox-title')
 
-/** Types as a person would, key by key, so anything that searches as you type would fire */
-async function search(page: Page, text: string) {
-  const box = searchBox(page)
-  await box.focus()
-  await box.fill('')
-  await box.pressSequentially(text, { delay: 20 })
-  await box.press('Enter')
-}
-
 test('place search: only on Enter, pinned with its name, credited, cached', async ({ page }) => {
   await stubHazardData(page)
-  const searches = await stubNominatim(page)
+  const searches = await stubNominatim(page, { places: { paris: [paris] } })
   await page.goto('/')
 
   const box = searchBox(page)

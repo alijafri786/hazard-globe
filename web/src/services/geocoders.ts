@@ -13,6 +13,8 @@ import {
 /** A search result's own point, where the pin goes; the camera flies to the area around it. */
 export interface Place {
   name: string
+  /** Short enough for a label on the globe or a button */
+  label: string
   lon: number
   lat: number
   /** HTML credit for the place data, shown with the pin */
@@ -79,7 +81,8 @@ export class CoordinateGeocoderService implements GeocoderService {
   async geocode(query: string): Promise<GeocoderService.Result[]> {
     const point = parseCoordinates(query)
     if (!point) return []
-    return [result(around(point.lon, point.lat, MIN_SPAN_DEG), { ...point, name: formatCoordinates(point.lon, point.lat) })]
+    const name = formatCoordinates(point.lon, point.lat)
+    return [result(around(point.lon, point.lat, MIN_SPAN_DEG), { ...point, name, label: name })]
   }
 }
 
@@ -122,7 +125,13 @@ export class NominatimGeocoderService implements GeocoderService {
     const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
     if (!res.ok) throw new Error(`Nominatim answered ${res.status}`)
     const found = ((await res.json()) as NominatimPlace[]).map((p) => {
-      const place = { name: p.display_name, lon: Number(p.lon), lat: Number(p.lat), attribution: OSM_CREDIT }
+      const place = {
+        name: p.display_name,
+        label: firstPart(p.display_name),
+        lon: Number(p.lon),
+        lat: Number(p.lat),
+        attribution: OSM_CREDIT,
+      }
       const [south, north, west, east] = p.boundingbox.map(Number)
       const lonSpan = east - west
       const latSpan = north - south
@@ -157,10 +166,15 @@ export class LazyIonGeocoderService implements GeocoderService {
     this.service ??= new IonGeocoderService({ scene })
     const found = await this.service.geocode(query, type)
     // ion gives an area or a point, not both: the pin goes in the middle
-    for (const r of found) places.set(r.destination, { ...centreOf(r.destination), name: r.displayName })
+    for (const r of found) {
+      places.set(r.destination, { ...centreOf(r.destination), name: r.displayName, label: firstPart(r.displayName) })
+    }
     return found
   }
 }
+
+/** "Paris, Île-de-France, France" -> "Paris" */
+const firstPart = (name: string) => name.split(',')[0].trim()
 
 function centreOf(destination: Rectangle | Cartesian3) {
   const c = destination instanceof Rectangle ? Rectangle.center(destination) : Cartographic.fromCartesian(destination)

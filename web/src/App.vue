@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AlertSetup from './components/AlertSetup.vue'
 import CameraControls from './components/CameraControls.vue'
 import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
+import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
 import { useHazardLayer } from './composables/useHazardLayer'
 import { useSearchPin } from './composables/useSearchPin'
+import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
@@ -21,10 +23,26 @@ const forecast = useFloodForecastLayer(viewer, timeline)
 const flights = useFlightLayer(viewer)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
-useSearchPin(viewer)
+const search = useSearchPin(viewer)
+const temperature = useTemperature(viewer, timeline)
 
 const panelOpen = ref(true)
-const tab = ref<'events' | 'flights' | 'alerts'>('events')
+const tab = ref<'events' | 'weather' | 'flights' | 'alerts'>('events')
+
+const picking = computed(() => watchAreas.picking.value || temperature.picking.value)
+
+// A pick started on one tab shouldn't land after moving to another
+watch(tab, () => {
+  watchAreas.stopPicking()
+  temperature.stopPicking()
+})
+
+// Searching from the Weather tab answers with the weather there
+watch(search.found, (place) => {
+  if (place && tab.value === 'weather' && timeline.mode.value === 'live') {
+    void temperature.check(place.lon, place.lat, place.name)
+  }
+})
 </script>
 
 <template>
@@ -41,6 +59,9 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
         <button role="tab" :aria-selected="tab === 'events'" :class="{ on: tab === 'events' }" @click="tab = 'events'">
           Events
         </button>
+        <button role="tab" :aria-selected="tab === 'weather'" :class="{ on: tab === 'weather' }" @click="tab = 'weather'">
+          Weather
+        </button>
         <button role="tab" :aria-selected="tab === 'flights'" :class="{ on: tab === 'flights' }" @click="tab = 'flights'">
           Flights
         </button>
@@ -52,6 +73,12 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
 
     <div v-show="panelOpen" class="panel-body">
       <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" />
+      <WeatherPanel
+        v-else-if="tab === 'weather'"
+        :weather="temperature"
+        :mode="timeline.mode.value"
+        :searched="search.found.value"
+      />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
       <AlertSetup v-else :watch="watchAreas" />
 
@@ -64,7 +91,7 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
   </aside>
 
   <!-- So a past day is never mistaken for what is happening now -->
-  <div v-if="timeline.mode.value === 'history' && !watchAreas.picking.value" class="history-badge" role="status">
+  <div v-if="timeline.mode.value === 'history' && !picking" class="history-badge" role="status">
     History · {{ formatDay(timeline.day.value) }}
     <button @click="timeline.mode.value = 'live'">Back to live</button>
   </div>
@@ -72,6 +99,10 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
   <div v-if="watchAreas.picking.value" class="pick-hint">
     Tap the globe to place this area
     <button @click="watchAreas.stopPicking()">Cancel</button>
+  </div>
+  <div v-else-if="temperature.picking.value" class="pick-hint">
+    Tap the globe to check the temperature
+    <button @click="temperature.stopPicking()">Cancel</button>
   </div>
 </template>
 
@@ -115,9 +146,12 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
   display: flex;
   gap: 4px;
   border-bottom: 1px solid var(--line);
+  overflow-x: auto; /* room for more tabs on narrow screens */
+  scrollbar-width: none;
 }
 
 .tabs button {
+  flex: none;
   border: none;
   border-radius: 8px 8px 0 0;
   background: none;
