@@ -8,16 +8,27 @@ import { anySent, type Deliver } from './delivery.js'
 import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
 import { fetchGeometryCollection } from './gdacs.js'
+import { HISTORY_DAYS, isHistoryDays, type HistoryDays } from './history.js'
 import { escapeHtml, page } from './html.js'
 import type { Poller } from './poller.js'
 import { clientIp, createLimiter, rateLimit } from './ratelimit.js'
 import type { SubscriptionStore } from './store/index.js'
-import type { Channel, EmailChannel, HazardType, Subscription, TelegramChannel, WatchArea } from './types.js'
+import type {
+  Channel,
+  EmailChannel,
+  GdacsCollection,
+  HazardType,
+  Subscription,
+  TelegramChannel,
+  WatchArea,
+} from './types.js'
 import { mergeChannels, newToken, parseAreas, parsePushChannel } from './validate.js'
 
 export interface AppDeps {
   store: SubscriptionStore
   poller: Pick<Poller, 'latestEvents' | 'pollOnce'>
+  /** Past events for the time slider (see history.ts) */
+  history: (days: HistoryDays) => Promise<GdacsCollection>
   deliver: Deliver
   pushEnabled: boolean
   /** Present when email is set up */
@@ -115,7 +126,17 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     const latest = poller.latestEvents()
     if (!latest) return c.json({ error: 'GDACS unavailable, try again shortly' }, 503)
     c.header('Cache-Control', 'public, max-age=300')
-    return c.json({ fetchedAt: latest.fetchedAt, ...latest.data })
+    return c.json({ fetchedAt: latest.fetchedAt, days: config.lookbackDays, ...latest.data })
+  })
+
+  // Bigger than the live feed (90 days of floods), hence compressed
+  app.get('/api/events/history', rateLimit({ windowMs: MINUTE, max: 30, key: byIp, now }), compress(), async (c) => {
+    const days = Number(c.req.query('days'))
+    if (!isHistoryDays(days)) return c.json({ error: `days must be one of ${HISTORY_DAYS.join(', ')}` }, 400)
+    const data = await deps.history(days).catch(() => null)
+    if (!data) return c.json({ error: 'GDACS unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=900')
+    return c.json({ fetchedAt: new Date(now()).toISOString(), days, ...data })
   })
 
   // Uncached ids reach GDACS, so stop anyone walking through ids at our expense

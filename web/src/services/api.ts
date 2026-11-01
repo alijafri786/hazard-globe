@@ -34,6 +34,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   events: () => request<EventsResponse>('/api/events'),
 
+  history: (days: number) => request<EventsResponse>(`/api/events/history?days=${days}`),
+
   geometry: (type: HazardType, eventid: number, episodeid: number) =>
     request<{ type: 'FeatureCollection'; features: unknown[] }>(`/api/events/${type}/${eventid}/${episodeid}/geometry`),
 

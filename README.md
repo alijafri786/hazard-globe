@@ -4,6 +4,8 @@ An open-source 3D globe of **tropical cyclones and floods** worldwide, with **al
 
 Add up to 10 watch areas: pick each point on the globe (or use your location), then choose a radius, the hazards and a minimum alert level. You get a notification when a storm or flood footprint touches one of them.
 
+Switch the Events tab to **History** to look back over the last 7, 30 or 90 days: drag the slider or press play to see which storms and floods were active on each day.
+
 You can also switch on **live flights** to see aircraft worldwide, coloured by altitude, and search by callsign.
 
 > ⚠️ **Not an official warning service.** Data comes from [GDACS](https://www.gdacs.org) and can be delayed, incomplete or wrong. Always follow your national meteorological and civil protection agencies.
@@ -109,7 +111,8 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Channels:** a subscription can use any mix of browser, email and Telegram. If one stops working for good (browser permission revoked, mailbox rejected, bot blocked), it's removed; when none are left, so is the subscription.
 - **Alert logic:** each area is notified once per event, and again only if its alert level escalates (e.g. Orange → Red). When one event touches several of your areas, you get one notification naming them all. Moving an area's centre resets what it has already been told.
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
-- **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes.
+- **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes. History offers three fixed ranges, each ending today, and the server fetches each from GDACS at most once every 15 minutes however many people are looking.
+- **History days** are UTC days, as GDACS dates are. An event shows on every day between its start and its latest update.
 - **Storage:** the JSON store is fine for a few hundred subscribers (capped by `MAX_SUBSCRIBERS`); beyond that, use Postgres (see above). Both sit behind the `SubscriptionStore` interface in `server/src/store/` and are tested against the same suite, with Postgres run in-process via PGlite. If the JSON file is ever corrupted, the server refuses to start rather than overwrite it.
 - **Abuse:** API routes are rate-limited per IP in memory (subscribing 20/hour, test alerts 5 per 10 minutes per subscription, footprint lookups 60/minute, everything else 300/minute). Behind a reverse proxy, set `TRUST_PROXY` so limits see real client IPs. With several server instances, each counts separately.
 - **Flights:** the server only calls OpenSky while someone has the layer switched on, and shares one cached snapshot between all visitors, so it stays inside OpenSky's daily credit limit. Between snapshots, planes are moved along their last reported heading, so positions are approximate. Aircraft on the ground are left out.
@@ -121,7 +124,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - [ ] Flood forecasts (Copernicus GloFAS) — check licence terms before redistributing
 - [x] Multiple watch areas per device
 - [x] Email and Telegram delivery channels
-- [ ] Time slider for event history
+- [x] Time slider for event history
 - [x] Rate limiting
 - [x] Postgres store
 - [x] Tests: Vitest for matching logic, Playwright for the alert flow

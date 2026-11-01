@@ -7,12 +7,14 @@ import FlightPanel from './components/FlightPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useHazardLayer } from './composables/useHazardLayer'
+import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
 
 const globeEl = ref<HTMLElement | null>(null)
 const viewer = useViewer(globeEl)
-const hazards = useHazardLayer(viewer)
+const timeline = useTimeline()
+const hazards = useHazardLayer(viewer, timeline)
 const flights = useFlightLayer(viewer)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
@@ -45,7 +47,7 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
       <AlertSetup v-else :watch="watchAreas" />
 
@@ -56,6 +58,12 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
       </p>
     </div>
   </aside>
+
+  <!-- So a past day is never mistaken for what is happening now -->
+  <div v-if="timeline.mode.value === 'history' && !watchAreas.picking.value" class="history-badge" role="status">
+    History · {{ formatDay(timeline.day.value) }}
+    <button @click="timeline.mode.value = 'live'">Back to live</button>
+  </div>
 
   <div v-if="watchAreas.picking.value" class="pick-hint">
     Tap the globe to place this area
@@ -134,6 +142,29 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
   color: var(--text);
 }
 
+.history-badge {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 6px 6px 14px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-badge button {
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
 .pick-hint {
   position: fixed;
   top: 16px;
@@ -163,6 +194,12 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
 
   .panel.collapsed {
     max-height: none;
+  }
+
+  .history-badge {
+    top: 8px;
+    left: 8px;
+    transform: none;
   }
 }
 </style>

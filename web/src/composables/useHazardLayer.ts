@@ -16,6 +16,7 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } fr
 import { api } from '../services/api'
 import { escapeHtml } from '../services/html'
 import { ALERT_COLOURS, type AlertLevel, type HazardEvent, type HazardType } from '../types'
+import type { useTimeline } from './useTimeline'
 
 const RANK: Record<AlertLevel, number> = { Red: 2, Orange: 1, Green: 0 }
 const HAZARD_OUTLINE: Record<HazardType, Color> = {
@@ -47,9 +48,11 @@ function describe(e: HazardEvent): string {
     <p style="opacity:.7;font-size:12px">Source: GDACS. Not an official warning — follow your national weather service.</p>`
 }
 
-export function useHazardLayer(viewer: ShallowRef<Viewer | null>) {
+export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: ReturnType<typeof useTimeline>) {
   const events = shallowRef<HazardEvent[]>([])
   const fetchedAt = ref<string | null>(null)
+  /** how many days back the loaded events reach */
+  const days = ref<number | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const visible = ref<Record<HazardType, boolean>>({ TC: true, FL: true })
@@ -57,9 +60,12 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>) {
   const points = new CustomDataSource('gdacs-events')
   let footprint: GeoJsonDataSource | null = null
 
+  /** Its hazard type is switched on, and it was active on the timeline's day */
+  const shown = (e: HazardEvent) => visible.value[e.properties.eventtype] && timeline.shows(e)
+
   const sorted = computed(() =>
     [...events.value]
-      .filter((e) => visible.value[e.properties.eventtype])
+      .filter(shown)
       .sort((a, b) => RANK[b.properties.alertlevel] - RANK[a.properties.alertlevel]),
   )
 
@@ -75,7 +81,7 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>) {
           id: `${p.eventtype}-${p.eventid}`,
           name: p.name || p.description || `${p.eventtype} ${p.eventid}`,
           position,
-          show: visible.value[p.eventtype],
+          show: shown(e),
           description: describe(e),
           point: {
             pixelSize: 8 + RANK[p.alertlevel] * 4,
@@ -133,18 +139,23 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>) {
     }
   }
 
+  let latestRequest = 0
+
   async function refresh() {
+    const request = ++latestRequest
     loading.value = true
     error.value = null
     try {
-      const res = await api.events()
+      const res = timeline.mode.value === 'history' ? await api.history(timeline.days.value) : await api.events()
+      if (request !== latestRequest) return // switched mode or range meanwhile: a newer request wins
       events.value = res.features
       fetchedAt.value = res.fetchedAt
+      days.value = res.days
       render()
     } catch (err) {
-      error.value = (err as Error).message
+      if (request === latestRequest) error.value = (err as Error).message
     } finally {
-      loading.value = false
+      if (request === latestRequest) loading.value = false
     }
   }
 
@@ -171,20 +182,24 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>) {
   )
 
   watch(
-    visible,
+    [visible, timeline.day, timeline.mode],
     () => {
       for (const ent of points.entities.values) {
         const hazard = ent.properties?.hazard?.getValue() as HazardEvent | undefined
-        if (hazard) ent.show = visible.value[hazard.properties.eventtype]
+        if (hazard) ent.show = shown(hazard)
       }
       viewer.value?.scene.requestRender()
     },
     { deep: true },
   )
 
-  // keep data fresh while the tab is open
-  const timer = setInterval(() => void refresh(), 10 * 60_000)
+  watch([timeline.mode, timeline.days], ([mode], [prevMode]) => {
+    if (mode === 'history' || prevMode === 'history') void refresh()
+  })
+
+  // keep live data fresh while the tab is open; history only changes once a day
+  const timer = setInterval(() => timeline.mode.value === 'live' && void refresh(), 10 * 60_000)
   onBeforeUnmount(() => clearInterval(timer))
 
-  return { events: sorted, fetchedAt, loading, error, visible, refresh, flyTo }
+  return { events: sorted, fetchedAt, days, loading, error, visible, refresh, flyTo }
 }

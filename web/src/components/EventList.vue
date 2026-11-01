@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { useHazardLayer } from '../composables/useHazardLayer'
+import { formatDay, type useTimeline } from '../composables/useTimeline'
 import { ALERT_COLOURS, HAZARD_LABELS, type HazardType } from '../types'
+import TimelineControls from './TimelineControls.vue'
 
-const props = defineProps<{ layer: ReturnType<typeof useHazardLayer> }>()
-const { events, fetchedAt, loading, error, visible, refresh, flyTo } = props.layer
+const props = defineProps<{ layer: ReturnType<typeof useHazardLayer>; timeline: ReturnType<typeof useTimeline> }>()
+const { events, fetchedAt, days, loading, error, visible, refresh, flyTo } = props.layer
+const { mode, day } = props.timeline
 
 const hazardTypes: HazardType[] = ['TC', 'FL']
 const updated = computed(() =>
@@ -12,10 +15,17 @@ const updated = computed(() =>
     ? new Date(fetchedAt.value).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
     : null,
 )
+const empty = computed(() =>
+  mode.value === 'history'
+    ? `No storm or flood events on ${formatDay(day.value)}.`
+    : `No active storm or flood events in the last ${days.value ?? 10} days.`,
+)
 </script>
 
 <template>
   <section>
+    <TimelineControls :timeline="timeline" />
+
     <div class="toggles">
       <label v-for="h in hazardTypes" :key="h" class="toggle">
         <input v-model="visible[h]" type="checkbox" />
@@ -29,12 +39,15 @@ const updated = computed(() =>
     </div>
 
     <div class="meta">
-      <span v-if="updated">Updated {{ updated }}</span>
+      <span v-if="mode === 'history' && !loading">
+        {{ events.length }} {{ events.length === 1 ? 'event' : 'events' }} on {{ formatDay(day) }}
+      </span>
+      <span v-else-if="updated">Updated {{ updated }}</span>
       <button :disabled="loading" @click="refresh()">{{ loading ? 'Loading…' : 'Refresh' }}</button>
     </div>
 
     <p v-if="error" class="error">Couldn't load events: {{ error }}</p>
-    <p v-else-if="!loading && !events.length" class="empty">No active storm or flood events in the last 10 days.</p>
+    <p v-else-if="!loading && !events.length" class="empty">{{ empty }}</p>
 
     <ul class="events">
       <li v-for="e in events" :key="`${e.properties.eventtype}-${e.properties.eventid}`">

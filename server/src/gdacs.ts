@@ -24,14 +24,17 @@ async function getJson<T>(url: string): Promise<T | null> {
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
 
 /**
- * Fetch recent storm and flood events.
+ * Fetch storm and flood events from the last `days` days.
  * Alert levels are requested one at a time and de-duplicated on eventid:
  * the combined `alertlevel=a;b` filter has been reported as unreliable, and an
  * event's level can change during its lifetime.
  */
-export async function fetchEvents(hazards: HazardType[] = ['TC', 'FL']): Promise<GdacsCollection> {
+export async function fetchEvents({
+  days = config.lookbackDays,
+  hazards = ['TC', 'FL'],
+}: { days?: number; hazards?: HazardType[] } = {}): Promise<GdacsCollection> {
   const to = new Date()
-  const from = new Date(to.getTime() - config.lookbackDays * 86_400_000)
+  const from = new Date(to.getTime() - days * 86_400_000)
   const byId = new Map<string, GdacsEvent>()
 
   for (const level of LEVELS) {

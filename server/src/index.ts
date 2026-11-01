@@ -5,6 +5,7 @@ import { createApp } from './app.js'
 import { config, pushEnabled } from './config.js'
 import { createDeliver, type Notifier, type Notifiers } from './delivery.js'
 import { createEmailNotifier, type EmailNotifier, type Mailer } from './email.js'
+import { createHistory } from './history.js'
 import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { openStore, storeKind } from './store/index.js'
@@ -45,7 +46,7 @@ if (config.telegram.botToken && !e2e) {
 
 const deliver = createDeliver(notifiers)
 const poller = createPoller(store, deliver)
-const app = createApp({ store, poller, deliver, email, telegramBot, pushEnabled: e2e || pushEnabled })
+const app = createApp({ store, poller, history: createHistory(), deliver, email, telegramBot, pushEnabled: e2e || pushEnabled })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   const channels = [

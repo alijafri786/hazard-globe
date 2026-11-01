@@ -30,6 +30,18 @@ describe('fetchEvents', () => {
     expect(features[0].properties).toMatchObject({ eventid: 1, episodeid: 5, alertlevel: 'Orange' })
   })
 
+  it('asks for the last `days` days, defaulting to LOOKBACK_DAYS', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-30T15:00:00Z') })
+    const fetch = mockFetch(() => json(collection()))
+    const ranges = () => new Set(fetch.mock.calls.map(([u]) => `${new URL(String(u)).searchParams.get('fromdate')}..${new URL(String(u)).searchParams.get('todate')}`))
+
+    await fetchEvents({ days: 30 })
+    expect(ranges()).toEqual(new Set(['2026-05-31..2026-06-30']))
+    fetch.mockClear()
+    await fetchEvents()
+    expect(ranges()).toEqual(new Set(['2026-06-20..2026-06-30'])) // config default: 10 days
+  })
+
   it('drops hazard types it did not ask for', async () => {
     mockFetch(() => json(collection(makeEvent({ eventtype: 'EQ' as 'TC' }), makeEvent({ eventid: 2 }))))
     const { features } = await fetchEvents()

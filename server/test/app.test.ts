@@ -13,6 +13,7 @@ let dir: string
 let store: SubscriptionStore
 const deliver = vi.fn<Deliver>(async () => ({ results: { push: 'sent' }, gone: [] }))
 const sendConfirmation = vi.fn(async () => undefined)
+const history = vi.fn(async (days: number) => ({ type: 'FeatureCollection' as const, features: [], days }))
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'hazard-app-'))
@@ -28,7 +29,7 @@ afterEach(async () => {
 function setup(options: Partial<AppOptions> = {}, deps: Partial<AppDeps> = {}) {
   const poller = { latestEvents: () => null, pollOnce: async () => undefined }
   const app = createApp(
-    { store, poller, deliver, pushEnabled: true, email: { sendConfirmation }, telegramBot: 'hg_bot', ...deps },
+    { store, poller, history, deliver, pushEnabled: true, email: { sendConfirmation }, telegramBot: 'hg_bot', ...deps },
     { trustProxy: 1, ...options },
   )
   const call = (method: string, path: string, body?: unknown, ip = '1.1.1.1') =>
@@ -343,6 +344,24 @@ describe('DELETE /api/subscriptions/:id', () => {
     const { id } = await subscribe()
     expect((await call('DELETE', `/api/subscriptions/${id}`)).status).toBe(204)
     expect((await call('DELETE', `/api/subscriptions/${id}`)).status).toBe(404)
+  })
+})
+
+describe('GET /api/events/history', () => {
+  it('serves the offered ranges only', async () => {
+    const { app } = setup()
+    const res = await app.request('/api/events/history?days=30')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ days: 30, type: 'FeatureCollection', features: [], fetchedAt: expect.any(String) })
+    expect(history).toHaveBeenLastCalledWith(30)
+    for (const days of ['31', '0', '365', 'x', '']) {
+      expect((await app.request(`/api/events/history?days=${days}`)).status).toBe(400)
+    }
+  })
+
+  it('answers 503 when GDACS fails', async () => {
+    history.mockRejectedValueOnce(new Error('GDACS 503'))
+    expect((await setup().app.request('/api/events/history?days=7')).status).toBe(503)
   })
 })
 

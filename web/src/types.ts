@@ -23,6 +23,8 @@ export interface HazardEvent {
 
 export interface EventsResponse {
   fetchedAt: string
+  /** how many days back the events reach */
+  days: number
   features: HazardEvent[]
 }
 
