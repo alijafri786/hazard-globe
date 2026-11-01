@@ -1,0 +1,10 @@
+{
+  "name": "Hazard Globe",
+  "short_name": "Hazard Globe",
+  "description": "Tropical cyclones and floods on a 3D globe, with alerts for places you care about",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": []
+}

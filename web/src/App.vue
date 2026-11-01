@@ -1,0 +1,168 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import AlertSetup from './components/AlertSetup.vue'
+import CameraControls from './components/CameraControls.vue'
+import EventList from './components/EventList.vue'
+import FlightPanel from './components/FlightPanel.vue'
+import { useCameraControls } from './composables/useCameraControls'
+import { useFlightLayer } from './composables/useFlightLayer'
+import { useHazardLayer } from './composables/useHazardLayer'
+import { useViewer } from './composables/useViewer'
+import { useWatchArea } from './composables/useWatchArea'
+
+const globeEl = ref<HTMLElement | null>(null)
+const viewer = useViewer(globeEl)
+const hazards = useHazardLayer(viewer)
+const flights = useFlightLayer(viewer)
+const watchArea = useWatchArea(viewer)
+const camera = useCameraControls(viewer)
+
+const panelOpen = ref(true)
+const tab = ref<'events' | 'flights' | 'alerts'>('events')
+</script>
+
+<template>
+  <div ref="globeEl" class="globe" />
+  <CameraControls :controls="camera" />
+
+  <aside class="panel" :class="{ collapsed: !panelOpen }">
+    <header class="panel-head">
+      <button class="grip" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
+        <strong>Hazard Globe</strong>
+        <span class="chev">{{ panelOpen ? '▾' : '▴' }}</span>
+      </button>
+      <nav v-show="panelOpen" class="tabs" role="tablist">
+        <button role="tab" :aria-selected="tab === 'events'" :class="{ on: tab === 'events' }" @click="tab = 'events'">
+          Events
+        </button>
+        <button role="tab" :aria-selected="tab === 'flights'" :class="{ on: tab === 'flights' }" @click="tab = 'flights'">
+          Flights
+        </button>
+        <button role="tab" :aria-selected="tab === 'alerts'" :class="{ on: tab === 'alerts' }" @click="tab = 'alerts'">
+          My alerts
+        </button>
+      </nav>
+    </header>
+
+    <div v-show="panelOpen" class="panel-body">
+      <EventList v-if="tab === 'events'" :layer="hazards" />
+      <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
+      <AlertSetup v-else :watch="watchArea" />
+
+      <p class="disclaimer">
+        Data from <a href="https://www.gdacs.org" target="_blank" rel="noopener">GDACS</a>. This is not an official
+        warning service and alerts may be delayed or missed. Always follow your national meteorological and civil
+        protection agencies.
+      </p>
+    </div>
+  </aside>
+
+  <div v-if="watchArea.picking.value" class="pick-hint">
+    Tap the globe to set your watch area
+    <button @click="watchArea.stopPicking()">Cancel</button>
+  </div>
+</template>
+
+<style scoped>
+.globe {
+  position: fixed;
+  inset: 0;
+}
+
+.panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 360px;
+  max-height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+.panel-head {
+  padding: 12px 12px 0;
+}
+
+.grip {
+  all: unset;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding-bottom: 10px;
+  font-size: 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: none;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+.tabs button.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.panel-body {
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.disclaimer {
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.disclaimer a {
+  color: var(--text);
+}
+
+.pick-hint {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 8px 8px 14px;
+  background: var(--accent);
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+/* Mobile: bottom sheet */
+@media (max-width: 640px) {
+  .panel {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: 60%;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .panel.collapsed {
+    max-height: none;
+  }
+}
+</style>
