@@ -1,6 +1,6 @@
 try {
-  // Node >= 20.12 / 21.7 can load .env without a dependency
-  process.loadEnvFile?.('.env')
+  // Node >= 20.12 / 21.7 can load .env without a dependency. Tests stay hermetic: never real keys or files.
+  if (!process.env.VITEST) process.loadEnvFile?.('.env')
 } catch {
   /* no .env file — rely on real environment variables */
 }
@@ -16,6 +16,9 @@ export const config = {
   lookbackDays: num('LOOKBACK_DAYS', 10),
   dataFile: process.env.DATA_FILE ?? './data/store.json',
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+  /** Reverse proxies in front of the server; their X-Forwarded-For entries are trusted for client IPs. */
+  trustProxy: Number.parseInt(process.env.TRUST_PROXY ?? '0', 10) || 0,
+  maxSubscribers: num('MAX_SUBSCRIBERS', 1000),
   vapid: {
     publicKey: process.env.VAPID_PUBLIC_KEY ?? '',
     privateKey: process.env.VAPID_PRIVATE_KEY ?? '',

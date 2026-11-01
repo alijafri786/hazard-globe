@@ -66,8 +66,8 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Alert logic:** you're notified once per event, and again only if its alert level escalates (e.g. Orange → Red).
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
 - **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes.
-- **Storage:** the JSON store is fine for a few hundred subscribers. Swap `server/src/store.ts` for Postgres before going big.
-- **Abuse:** `POST /api/subscriptions` has no rate limiting yet — add it before a public deployment.
+- **Storage:** the JSON store is fine for a few hundred subscribers (capped by `MAX_SUBSCRIBERS`). Storage sits behind the `SubscriptionStore` interface in `server/src/store/`, ready for a database. If the file is ever corrupted, the server refuses to start rather than overwrite it.
+- **Abuse:** API routes are rate-limited per IP in memory (subscribing 20/hour, test alerts 5 per 10 minutes per subscription, footprint lookups 60/minute, everything else 300/minute). Behind a reverse proxy, set `TRUST_PROXY` so limits see real client IPs. With several server instances, each counts separately.
 - **Flights:** the server only calls OpenSky while someone has the layer switched on, and shares one cached snapshot between all visitors, so it stays inside OpenSky's daily credit limit. Between snapshots, planes are moved along their last reported heading, so positions are approximate. Aircraft on the ground are left out.
 - **OpenSky terms:** OpenSky data is free for research and non-commercial use. Check the terms of use on [opensky-network.org](https://opensky-network.org) before deploying commercially.
 
@@ -78,7 +78,8 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - [ ] Multiple watch areas per device
 - [ ] Email and Telegram delivery channels
 - [ ] Time slider for event history
-- [ ] Rate limiting and a Postgres store
+- [x] Rate limiting
+- [ ] Postgres store
 - [ ] Tests: Vitest for matching logic, Playwright for the alert flow
 
 ## Contributing

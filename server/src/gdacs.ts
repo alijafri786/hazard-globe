@@ -66,32 +66,36 @@ export async function fetchEvents(hazards: HazardType[] = ['TC', 'FL']): Promise
   return { type: 'FeatureCollection', features: [...byId.values()] }
 }
 
-const geometryCache = new Map<string, Geometry[]>()
+const geometryCache = new Map<string, GdacsCollection>()
+const GEOMETRY_CACHE_SIZE = 200 // cyclone collections can be a few hundred KB each
 
-/** Affected-area geometry (cyclone wind buffers/tracks, flood extents) for one episode. */
+/**
+ * Affected-area features (cyclone wind buffers/tracks, flood extents) for one episode, shared by the
+ * poller and the public API. Empty answers aren't cached: GDACS often adds the footprint later.
+ */
+export async function fetchGeometryCollection(
+  eventtype: HazardType,
+  eventid: number,
+  episodeid: number,
+): Promise<GdacsCollection | null> {
+  const key = `${eventtype}-${eventid}-${episodeid}`
+  const hit = geometryCache.get(key)
+  if (hit) return hit
+
+  const params = new URLSearchParams({ eventtype, eventid: String(eventid), episodeid: String(episodeid) })
+  const data = await getJson<GdacsCollection>(`${BASE}/polygons/getgeometry?${params}`)
+  if (data?.features?.length) {
+    geometryCache.set(key, data)
+    if (geometryCache.size > GEOMETRY_CACHE_SIZE) geometryCache.delete(geometryCache.keys().next().value as string)
+  }
+  return data
+}
+
 export async function fetchEventGeometry(
   eventtype: HazardType,
   eventid: number,
   episodeid: number,
 ): Promise<Geometry[]> {
-  const key = `${eventtype}-${eventid}-${episodeid}`
-  const hit = geometryCache.get(key)
-  if (hit) return hit
-
-  const params = new URLSearchParams({
-    eventtype,
-    eventid: String(eventid),
-    episodeid: String(episodeid),
-  })
-  const data = await getJson<GdacsCollection>(`${BASE}/polygons/getgeometry?${params}`)
-  const geoms = (data?.features ?? []).map((f) => f.geometry).filter((g): g is Geometry => Boolean(g))
-
-  geometryCache.set(key, geoms)
-  if (geometryCache.size > 500) geometryCache.delete(geometryCache.keys().next().value as string)
-  return geoms
-}
-
-export async function fetchGeometryCollection(eventtype: HazardType, eventid: number, episodeid: number) {
-  const params = new URLSearchParams({ eventtype, eventid: String(eventid), episodeid: String(episodeid) })
-  return getJson<GdacsCollection>(`${BASE}/polygons/getgeometry?${params}`)
+  const data = await fetchGeometryCollection(eventtype, eventid, episodeid)
+  return (data?.features ?? []).map((f) => f.geometry).filter((g): g is Geometry => Boolean(g))
 }
