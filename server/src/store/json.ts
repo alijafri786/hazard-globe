@@ -1,18 +1,19 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Store, Subscription } from '../types.js'
 import type { SubscriptionStore } from './index.js'
+import { migrateStore } from './migrate.js'
 
-async function readStore(file: string): Promise<Store> {
+async function readStore(file: string): Promise<unknown> {
   let text: string
   try {
     text = await readFile(file, 'utf8')
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { subscriptions: [] }
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { version: 2, subscriptions: [] }
     throw err
   }
   try {
-    return JSON.parse(text) as Store
+    return JSON.parse(text)
   } catch {
     // Starting empty here would overwrite every subscription on the next save
     throw new Error(`${file} is not valid JSON. Fix or move it, then restart.`)
@@ -24,7 +25,7 @@ async function readStore(file: string): Promise<Store> {
  * Fine for a few hundred subscribers; swap in a database beyond that.
  */
 export async function openJsonStore(file: string): Promise<SubscriptionStore> {
-  const store = await readStore(file)
+  const { store, migrated }: { store: Store; migrated: boolean } = migrateStore(await readStore(file))
   let writing: Promise<void> = Promise.resolve()
   let queued = false
 
@@ -45,6 +46,11 @@ export async function openJsonStore(file: string): Promise<SubscriptionStore> {
     return writing
   }
 
+  if (migrated) {
+    await copyFile(file, `${file}.pre-v2.bak`).catch(() => undefined) // nothing to back up for a new file
+    await persist()
+  }
+
   const find = (id: string) => store.subscriptions.find((s) => s.id === id)
 
   return {
@@ -55,7 +61,7 @@ export async function openJsonStore(file: string): Promise<SubscriptionStore> {
       return find(id)
     },
     async findByEndpoint(endpoint) {
-      return store.subscriptions.find((s) => s.push.endpoint === endpoint)
+      return store.subscriptions.find((s) => s.channels.some((ch) => ch.kind === 'push' && ch.endpoint === endpoint))
     },
     async count() {
       return store.subscriptions.length
@@ -73,11 +79,25 @@ export async function openJsonStore(file: string): Promise<SubscriptionStore> {
       await persist()
       return true
     },
-    async recordNotified(id, eventKey, level) {
-      const sub = find(id)
-      if (!sub) return
-      sub.notified[eventKey] = level
+    async recordNotified(id, areaIds, eventKey, level) {
+      const at = new Date().toISOString()
+      for (const area of find(id)?.areas ?? []) {
+        if (areaIds.includes(area.id)) area.notified[eventKey] = { level, at }
+      }
       await persist()
+    },
+    async pruneNotified(activeKeys, before) {
+      let pruned = 0
+      for (const area of store.subscriptions.flatMap((s) => s.areas)) {
+        for (const [key, { at }] of Object.entries(area.notified)) {
+          if (!activeKeys.has(key) && new Date(at) < before) {
+            delete area.notified[key]
+            pruned++
+          }
+        }
+      }
+      if (pruned) await persist()
+      return pruned
     },
   }
 }

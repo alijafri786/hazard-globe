@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { useWatchArea } from '../composables/useWatchArea'
+import { computed, ref } from 'vue'
+import type { useWatchAreas } from '../composables/useWatchAreas'
 import { api } from '../services/api'
 import { dropPushSubscription, getPushSubscription, pushSupport } from '../services/push'
-import { HAZARD_LABELS, type AlertLevel, type HazardType } from '../types'
+import { MAX_AREAS, type WatchArea } from '../types'
+import AreaEditor from './AreaEditor.vue'
 
-const props = defineProps<{ watch: ReturnType<typeof useWatchArea> }>()
-const { area, subscriptionId, startPicking, useDeviceLocation, flyToArea, clear } = props.watch
+const props = defineProps<{ watch: ReturnType<typeof useWatchAreas> }>()
+const { areas, subscriptionId, draft, editingIndex, expired, startAdd, startEdit, cancelEdit, withDraft, without } =
+  props.watch
 
 const support = pushSupport()
-const hazards = ref<HazardType[]>(['TC', 'FL'])
-const minAlert = ref<AlertLevel>('Orange')
 const busy = ref(false)
 const status = ref<{ kind: 'ok' | 'error'; text: string } | null>(null)
+const subscribed = computed(() => Boolean(subscriptionId.value))
 
 async function run(task: () => Promise<string>) {
   busy.value = true
@@ -26,27 +27,62 @@ async function run(task: () => Promise<string>) {
   }
 }
 
-const locate = () => run(async () => (await useDeviceLocation(), flyToArea(), 'Centred on your location.'))
+function summary(a: WatchArea): string {
+  const hazards = a.hazards.length === 2 ? 'Storms and floods' : a.hazards[0] === 'TC' ? 'Storms' : 'Floods'
+  const level = { Green: 'all levels', Orange: 'orange and red', Red: 'red only' }[a.minAlert]
+  return `${a.radiusKm} km · ${hazards}, ${level}`
+}
+
+/** Saves a new list: on this device until alerts are on, then on the server, which assigns ids. */
+async function apply(next: WatchArea[]) {
+  if (!subscriptionId.value) {
+    areas.value = next
+    return
+  }
+  const view = await api.subscribe({ id: subscriptionId.value, areas: next, push: await getPushSubscription() })
+  subscriptionId.value = view.id
+  areas.value = view.areas
+}
+
+const locate = () =>
+  run(async () => {
+    await props.watch.useDeviceLocation()
+    if (draft.value) props.watch.flyTo(draft.value)
+    return 'Centred on your location.'
+  })
+
+const saveDraft = () =>
+  run(async () => {
+    const next = withDraft()
+    if (!next) throw new Error('Choose a centre for this area first.')
+    const i = editingIndex.value ?? next.length - 1
+    const verb = editingIndex.value === null ? 'Added' : 'Saved'
+    await apply(next)
+    cancelEdit()
+    return `${verb} ${next[i].label}.${subscribed.value ? ' Alerts updated.' : ''}`
+  })
+
+const remove = (i: number) =>
+  run(async () => {
+    const { label } = areas.value[i]
+    await apply(without(i))
+    return `Removed ${label}.`
+  })
 
 const subscribe = () =>
   run(async () => {
-    if (!area.value) throw new Error('Choose an area first.')
-    if (!hazards.value.length) throw new Error('Pick at least one hazard type.')
+    if (!areas.value.length) throw new Error('Add an area first.')
     const push = await getPushSubscription()
-    const res = await api.subscribe({
-      id: subscriptionId.value,
-      area: area.value,
-      hazards: hazards.value,
-      minAlert: minAlert.value,
-      push,
-    })
-    subscriptionId.value = res.id
-    return `Watching ${area.value.label}. You'll be notified about ${minAlert.value.toLowerCase()}+ alerts.`
+    const view = await api.subscribe({ id: subscriptionId.value, areas: areas.value, push })
+    subscriptionId.value = view.id
+    areas.value = view.areas
+    expired.value = false
+    return 'Alerts turned on. Send a test to check they arrive.'
   })
 
 const test = () =>
   run(async () => {
-    if (!subscriptionId.value) throw new Error('Subscribe first.')
+    if (!subscriptionId.value) throw new Error('Turn on alerts first.')
     const { result } = await api.test(subscriptionId.value)
     if (result !== 'sent') throw new Error('The server could not deliver a notification.')
     return 'Test notification sent.'
@@ -56,8 +92,9 @@ const unsubscribe = () =>
   run(async () => {
     if (subscriptionId.value) await api.unsubscribe(subscriptionId.value).catch(() => undefined)
     await dropPushSubscription()
-    clear()
-    return 'Alerts turned off and your area removed.'
+    subscriptionId.value = undefined
+    areas.value = areas.value.map(({ id: _, ...a }) => a) // server ids mean nothing once it has forgotten us
+    return 'Alerts turned off. Your areas are kept on this device.'
   })
 </script>
 
@@ -68,51 +105,59 @@ const unsubscribe = () =>
       enable alerts.
     </p>
     <p v-else-if="support === 'unsupported'" class="note">This browser doesn't support push notifications.</p>
+    <p v-if="expired" class="note">Your alerts were switched off on the server. Turn them on again to keep watching.</p>
 
-    <h3>1. Where?</h3>
+    <h3>Watch areas</h3>
+    <p v-if="!areas.length && !draft" class="empty">Add the places you care about: home, family, a site you manage.</p>
+
+    <ul class="areas">
+      <li v-for="(a, i) in areas" :key="a.id ?? `local-${i}`">
+        <AreaEditor v-if="draft && editingIndex === i" :watch="watch" :busy="busy" @save="saveDraft" @locate="locate" />
+        <div v-else class="area">
+          <button class="area-main" @click="watch.flyTo(a)">
+            <strong>{{ a.label }}</strong>
+            <small>{{ summary(a) }}</small>
+          </button>
+          <button class="link" :disabled="busy || !!draft" @click="startEdit(i)">Edit</button>
+          <button
+            class="link danger"
+            :disabled="busy || !!draft || (subscribed && areas.length === 1)"
+            :title="subscribed && areas.length === 1 ? 'Turn off alerts to remove your last area' : undefined"
+            @click="remove(i)"
+          >
+            Remove
+          </button>
+        </div>
+      </li>
+    </ul>
+
+    <AreaEditor
+      v-if="draft && editingIndex === null"
+      :watch="watch"
+      :busy="busy"
+      @save="saveDraft"
+      @locate="locate"
+    />
+    <button v-else-if="!draft && areas.length < MAX_AREAS" :disabled="busy" @click="startAdd()">+ Add area</button>
+
+    <h3>Notifications</h3>
+    <p v-if="subscribed" class="on">
+      Alerts are on for {{ areas.length === 1 ? areas[0].label : `${areas.length} areas` }}.
+    </p>
     <div class="row">
-      <button @click="startPicking()">Pick on globe</button>
-      <button :disabled="busy" @click="locate">Use my location</button>
+      <button
+        v-if="!subscribed"
+        class="primary"
+        :disabled="busy || !!draft || !areas.length || support !== 'supported'"
+        @click="subscribe"
+      >
+        Turn on alerts
+      </button>
+      <template v-else>
+        <button :disabled="busy" @click="test">Send test</button>
+        <button class="danger" :disabled="busy" @click="unsubscribe">Turn off</button>
+      </template>
     </div>
-
-    <template v-if="area">
-      <label class="field">
-        Name
-        <input v-model.trim="area.label" type="text" maxlength="80" placeholder="e.g. Mum's house" />
-      </label>
-      <label class="field">
-        Radius: {{ area.radiusKm }} km
-        <input v-model.number="area.radiusKm" type="range" min="25" max="500" step="25" />
-      </label>
-      <p class="coords">
-        {{ area.lat.toFixed(2) }}°, {{ area.lon.toFixed(2) }}°
-        <button class="link" @click="flyToArea()">Show</button>
-      </p>
-
-      <h3>2. What?</h3>
-      <div class="row">
-        <label v-for="h in (['TC', 'FL'] as HazardType[])" :key="h" class="check">
-          <input v-model="hazards" type="checkbox" :value="h" /> {{ HAZARD_LABELS[h] }}
-        </label>
-      </div>
-      <label class="field">
-        Minimum alert level
-        <select v-model="minAlert">
-          <option value="Green">Green (all events — noisy)</option>
-          <option value="Orange">Orange (recommended)</option>
-          <option value="Red">Red only</option>
-        </select>
-      </label>
-
-      <h3>3. Notify me</h3>
-      <div class="row">
-        <button class="primary" :disabled="busy || support !== 'supported'" @click="subscribe">
-          {{ subscriptionId ? 'Update alerts' : 'Turn on alerts' }}
-        </button>
-        <button v-if="subscriptionId" :disabled="busy" @click="test">Send test</button>
-        <button v-if="subscriptionId" class="danger" :disabled="busy" @click="unsubscribe">Turn off</button>
-      </div>
-    </template>
 
     <p v-if="status" class="status" :class="status.kind" role="status">{{ status.text }}</p>
   </section>
@@ -138,22 +183,38 @@ h3:first-of-type {
   gap: 8px;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
-  font-size: 14px;
+.areas {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
 }
 
-.check {
+.area {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
 }
 
-.coords {
+.area-main {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.area-main strong {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-main small {
   font-size: 12px;
   color: var(--muted);
 }
@@ -161,9 +222,23 @@ h3:first-of-type {
 .link {
   border: none;
   background: none;
-  padding: 0 4px;
+  padding: 4px 6px;
   color: var(--accent);
   text-decoration: underline;
+}
+
+.link.danger {
+  color: var(--red);
+}
+
+.link:disabled {
+  opacity: 0.4;
+}
+
+.empty,
+.on {
+  font-size: 14px;
+  color: var(--muted);
 }
 
 .note {

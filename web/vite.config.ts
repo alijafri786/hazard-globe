@@ -28,7 +28,8 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/api': 'http://localhost:8787',
+      // Overridden by the end-to-end tests, which run their own server next to any dev server
+      '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:8787',
     },
   },
 })

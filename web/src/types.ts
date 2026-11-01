@@ -26,11 +26,26 @@ export interface EventsResponse {
   features: HazardEvent[]
 }
 
+export const MAX_AREAS = 10
+
 export interface WatchArea {
+  /** assigned by the server once alerts are on */
+  id?: string
   label: string
   lon: number
   lat: number
   radiusKm: number
+  hazards: HazardType[]
+  minAlert: AlertLevel
+}
+
+/** An area being added or edited: it has no centre until one is picked. */
+export type DraftArea = Omit<WatchArea, 'lon' | 'lat'> & { lon?: number; lat?: number }
+
+export interface SubscriptionView {
+  id: string
+  areas: (WatchArea & { id: string })[]
+  channels: { kind: string }[]
 }
 
 /** [icao24, callsign, originCountry, lon, lat, altitudeM, velocityMs, trackDeg, verticalRateMs] */

@@ -10,7 +10,8 @@ import type { Poller } from './poller.js'
 import type { SendResult } from './push.js'
 import { clientIp, rateLimit } from './ratelimit.js'
 import type { SubscriptionStore } from './store/index.js'
-import { ALERT_RANK, type AlertLevel, type AlertPayload, type HazardType, type Subscription } from './types.js'
+import type { AlertPayload, HazardType, Subscription } from './types.js'
+import { parseAreas, parsePushChannel } from './validate.js'
 
 export interface AppDeps {
   store: SubscriptionStore
@@ -24,15 +25,24 @@ export interface AppOptions {
   now: () => number
 }
 
+/** Untrusted: everything is checked in validate.ts. `area`, `hazards` and `minAlert` are the v1 single-area form. */
 interface SubscribeBody {
-  id?: string
-  area: { label?: string; lon: number; lat: number; radiusKm: number }
-  hazards?: HazardType[]
-  minAlert?: AlertLevel
-  push: Subscription['push']
+  id?: unknown
+  areas?: unknown
+  area?: unknown
+  hazards?: unknown
+  minAlert?: unknown
+  push?: unknown
 }
 
 const MINUTE = 60_000
+
+/** What a client may see: no alert history, and no channel secrets. */
+const publicView = (sub: Subscription) => ({
+  id: sub.id,
+  areas: sub.areas.map(({ notified: _, ...area }) => area),
+  channels: sub.channels.map((ch) => ({ kind: ch.kind })),
+})
 
 export function createApp({ store, poller, sendPush }: AppDeps, options: Partial<AppOptions> = {}) {
   const { trustProxy, maxSubscribers, now } = {
@@ -91,40 +101,34 @@ export function createApp({ store, poller, sendPush }: AppDeps, options: Partial
     bodyLimit({ maxSize: 16 * 1024, onError: (c) => c.json({ error: 'request too large' }, 413) }),
     async (c) => {
       const body = await c.req.json<SubscribeBody>().catch(() => null)
-      const a = body?.area
-      const valid =
-        body?.push?.endpoint?.startsWith('https://') &&
-        body.push.keys?.p256dh &&
-        body.push.keys?.auth &&
-        a &&
-        Math.abs(a.lat) <= 90 &&
-        Math.abs(a.lon) <= 180 &&
-        a.radiusKm >= 5 &&
-        a.radiusKm <= 1000
-      if (!body || !valid) return c.json({ error: 'invalid subscription' }, 400)
+      const push = parsePushChannel(body?.push)
+      if (!body || !push) return c.json({ error: 'invalid subscription' }, 400)
 
       // A browser that lost its saved id re-subscribes with the same endpoint: update, don't duplicate
       const existing =
-        (body.id ? await store.get(body.id) : undefined) ?? (await store.findByEndpoint(body.push.endpoint))
+        (typeof body.id === 'string' ? await store.get(body.id) : undefined) ??
+        (await store.findByEndpoint(push.endpoint))
+      const areas = parseAreas(body.areas ?? (body.area ? [body.area] : undefined), existing?.areas, body)
+      if (!areas) return c.json({ error: 'invalid subscription' }, 400)
       if (!existing && (await store.count()) >= maxSubscribers) {
         return c.json({ error: 'This server has reached its subscriber limit' }, 503)
       }
-      const hazards = (body.hazards ?? ['TC', 'FL']).filter((h): h is HazardType => h === 'TC' || h === 'FL')
-      const minAlert: AlertLevel = body.minAlert && body.minAlert in ALERT_RANK ? body.minAlert : 'Orange'
 
       const sub: Subscription = {
         id: existing?.id ?? randomUUID(),
         createdAt: existing?.createdAt ?? new Date().toISOString(),
-        area: { label: (a.label || 'My area').slice(0, 80), lon: a.lon, lat: a.lat, radiusKm: a.radiusKm },
-        hazards: hazards.length ? hazards : ['TC', 'FL'],
-        minAlert,
-        push: body.push,
-        notified: existing?.notified ?? {},
+        channels: [push],
+        areas,
       }
       await store.upsert(sub)
-      return c.json({ id: sub.id, area: sub.area, hazards: sub.hazards, minAlert: sub.minAlert }, existing ? 200 : 201)
+      return c.json(publicView(sub), existing ? 200 : 201)
     },
   )
+
+  app.get('/api/subscriptions/:id', async (c) => {
+    const sub = await store.get(c.req.param('id'))
+    return sub ? c.json(publicView(sub)) : c.json({ error: 'not found' }, 404)
+  })
 
   app.post(
     '/api/subscriptions/:id/test',
@@ -134,7 +138,7 @@ export function createApp({ store, poller, sendPush }: AppDeps, options: Partial
       if (!sub) return c.json({ error: 'not found' }, 404)
       const result = await sendPush(sub, {
         title: 'Hazard Globe test alert',
-        body: `Alerts are working for ${sub.area.label} (${sub.area.radiusKm} km).`,
+        body: `Alerts are working for ${sub.areas.map((a) => a.label).join(', ')}.`,
         tag: 'test',
       })
       return c.json({ result })

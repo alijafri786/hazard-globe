@@ -1,4 +1,4 @@
-import { planAlerts } from './alerts.js'
+import { eventKey, planAlerts } from './alerts.js'
 import { config } from './config.js'
 import { fetchEventGeometry, fetchEvents } from './gdacs.js'
 import type { SendResult } from './push.js'
@@ -6,6 +6,9 @@ import type { SubscriptionStore } from './store/index.js'
 import type { AlertPayload, GdacsCollection, Subscription } from './types.js'
 
 export type Poller = ReturnType<typeof createPoller>
+
+// Long enough that an event dropping out of one GDACS response and back in doesn't alert twice
+const FORGET_AFTER_MS = 30 * 86_400_000
 
 export function createPoller(
   store: SubscriptionStore,
@@ -27,11 +30,12 @@ export function createPoller(
       let sent = 0
       const gone = new Set<string>()
 
-      for (const { sub, eventKey, level, payload } of alerts) {
+      for (const alert of alerts) {
+        const { sub } = alert
         if (gone.has(sub.id)) continue // the browser already revoked it this poll
-        const result = await send(sub, payload)
+        const result = await send(sub, alert.payload)
         if (result === 'sent') {
-          await store.recordNotified(sub.id, eventKey, level)
+          await store.recordNotified(sub.id, alert.areaIds, alert.eventKey, alert.level)
           sent++
         } else if (result === 'gone') {
           gone.add(sub.id)
@@ -39,9 +43,13 @@ export function createPoller(
       }
 
       for (const id of gone) await store.remove(id)
+      const pruned = await store.pruneNotified(
+        new Set(data.features.map(eventKey)),
+        new Date(Date.now() - FORGET_AFTER_MS),
+      )
       console.log(
         `[poll] ${data.features.length} events, ${subs.length} subscriptions, ${sent} alerts sent, ` +
-          `${gone.size} expired, ${Date.now() - started}ms`,
+          `${gone.size} expired, ${pruned} old alerts forgotten, ${Date.now() - started}ms`,
       )
     } catch (err) {
       console.error('[poll] failed:', (err as Error).message)

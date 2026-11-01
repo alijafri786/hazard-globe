@@ -3,7 +3,9 @@ import circle from '@turf/circle'
 import type { Feature, Geometry, Polygon } from 'geojson'
 import type { WatchArea } from './types.js'
 
-export function areaPolygon(area: WatchArea): Feature<Polygon> {
+type Circle = Pick<WatchArea, 'lon' | 'lat' | 'radiusKm'>
+
+export function areaPolygon(area: Circle): Feature<Polygon> {
   return circle([area.lon, area.lat], area.radiusKm, { units: 'kilometers', steps: 64 })
 }
 
@@ -51,7 +53,7 @@ function lonShifts([zoneMin, zoneMax]: [number, number], g: Geometry): number[] 
  * True when any affected-area geometry, or the event's own location, touches the watch area.
  * Falls back to the event point when GDACS has no polygon yet (common early in an event).
  */
-export function touchesArea(area: WatchArea, eventGeometry: Geometry | null, affected: Geometry[]): boolean {
+export function touchesArea(area: Circle, eventGeometry: Geometry | null, affected: Geometry[]): boolean {
   const zone = areaPolygon(area)
   const zoneExtent = lonExtent(zone.geometry)
   const candidates = affected.length ? affected : eventGeometry ? [eventGeometry] : []

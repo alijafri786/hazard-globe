@@ -2,7 +2,7 @@
 
 An open-source 3D globe of **tropical cyclones and floods** worldwide, with **push alerts for the places you care about** — your home, your family abroad, a site you manage.
 
-Pick a point on the globe (or use your location), choose a radius and a minimum alert level, and get a notification when a storm or flood footprint touches that area.
+Add up to 10 watch areas: pick each point on the globe (or use your location), then choose a radius, the hazards and a minimum alert level. You get a notification when a storm or flood footprint touches one of them.
 
 You can also switch on **live flights** to see aircraft worldwide, coloured by altitude, and search by callsign.
 
@@ -37,6 +37,13 @@ npm test                            # server unit tests (Vitest)
 
 Open http://localhost:5173. Push notifications work on `localhost`; anywhere else they need HTTPS.
 
+End-to-end tests (Playwright) start their own server and web app on ports 8788 and 5174, with a throwaway store, so they never touch your dev data:
+
+```bash
+npx playwright install chromium   # once
+npm run test:e2e
+```
+
 ### Optional: satellite imagery and terrain
 
 Create a free token at https://ion.cesium.com and add it to `web/.env.local`:
@@ -63,7 +70,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 ## Notes and limits
 
 - **iPhone/iPad:** web push only works after the site is added to the Home Screen (iOS 16.4+).
-- **Alert logic:** you're notified once per event, and again only if its alert level escalates (e.g. Orange → Red).
+- **Alert logic:** each area is notified once per event, and again only if its alert level escalates (e.g. Orange → Red). When one event touches several of your areas, you get one notification naming them all. Moving an area's centre resets what it has already been told.
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
 - **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes.
 - **Storage:** the JSON store is fine for a few hundred subscribers (capped by `MAX_SUBSCRIBERS`). Storage sits behind the `SubscriptionStore` interface in `server/src/store/`, ready for a database. If the file is ever corrupted, the server refuses to start rather than overwrite it.
@@ -75,12 +82,12 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 
 - [ ] Forecast cones from NOAA NHC / JTWC for cyclones
 - [ ] Flood forecasts (Copernicus GloFAS) — check licence terms before redistributing
-- [ ] Multiple watch areas per device
+- [x] Multiple watch areas per device
 - [ ] Email and Telegram delivery channels
 - [ ] Time slider for event history
 - [x] Rate limiting
 - [ ] Postgres store
-- [ ] Tests: Vitest for matching logic, Playwright for the alert flow
+- [x] Tests: Vitest for matching logic, Playwright for the alert flow
 
 ## Contributing
 

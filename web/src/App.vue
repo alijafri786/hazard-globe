@@ -8,13 +8,13 @@ import { useCameraControls } from './composables/useCameraControls'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useHazardLayer } from './composables/useHazardLayer'
 import { useViewer } from './composables/useViewer'
-import { useWatchArea } from './composables/useWatchArea'
+import { useWatchAreas } from './composables/useWatchAreas'
 
 const globeEl = ref<HTMLElement | null>(null)
 const viewer = useViewer(globeEl)
 const hazards = useHazardLayer(viewer)
 const flights = useFlightLayer(viewer)
-const watchArea = useWatchArea(viewer)
+const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 
 const panelOpen = ref(true)
@@ -47,7 +47,7 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
     <div v-show="panelOpen" class="panel-body">
       <EventList v-if="tab === 'events'" :layer="hazards" />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
-      <AlertSetup v-else :watch="watchArea" />
+      <AlertSetup v-else :watch="watchAreas" />
 
       <p class="disclaimer">
         Data from <a href="https://www.gdacs.org" target="_blank" rel="noopener">GDACS</a>. This is not an official
@@ -57,9 +57,9 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
     </div>
   </aside>
 
-  <div v-if="watchArea.picking.value" class="pick-hint">
-    Tap the globe to set your watch area
-    <button @click="watchArea.stopPicking()">Cancel</button>
+  <div v-if="watchAreas.picking.value" class="pick-hint">
+    Tap the globe to place this area
+    <button @click="watchAreas.stopPicking()">Cancel</button>
   </div>
 </template>
 

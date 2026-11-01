@@ -14,8 +14,10 @@ export async function sendPush(sub: Subscription, payload: AlertPayload): Promis
     console.warn('[push] VAPID keys missing — would have sent:', payload.title)
     return 'failed'
   }
+  const channel = sub.channels.find((ch) => ch.kind === 'push')
+  if (!channel) return 'failed'
   try {
-    await webpush.sendNotification(sub.push, JSON.stringify(payload), { TTL: 6 * 60 * 60, urgency: 'high' })
+    await webpush.sendNotification(channel, JSON.stringify(payload), { TTL: 6 * 60 * 60, urgency: 'high' })
     return 'sent'
   } catch (err) {
     const status = (err as { statusCode?: number }).statusCode

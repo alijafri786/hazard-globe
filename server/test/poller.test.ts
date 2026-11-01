@@ -17,6 +17,7 @@ function fakeStore(subs: Subscription[]): SubscriptionStore {
     upsert: vi.fn(async () => undefined),
     remove: vi.fn(async () => true),
     recordNotified: vi.fn(async () => undefined),
+    pruneNotified: vi.fn(async () => 0),
   }
 }
 
@@ -37,8 +38,18 @@ describe('poller', () => {
     await createPoller(store, send).pollOnce()
 
     expect(send).toHaveBeenCalledTimes(2)
-    expect(store.recordNotified).toHaveBeenCalledWith('a', 'TC-1', 'Orange')
-    expect(store.recordNotified).toHaveBeenCalledWith('a', 'TC-2', 'Red')
+    expect(store.recordNotified).toHaveBeenCalledWith('a', ['area-1'], 'TC-1', 'Orange')
+    expect(store.recordNotified).toHaveBeenCalledWith('a', ['area-1'], 'TC-2', 'Red')
+  })
+
+  it('forgets alerts older than 30 days for events GDACS no longer lists', async () => {
+    const store = fakeStore([])
+    const before = Date.now()
+    await createPoller(store, async () => 'sent').pollOnce()
+
+    const [active, cutoff] = vi.mocked(store.pruneNotified).mock.calls[0]
+    expect([...active]).toEqual(['TC-1', 'TC-2'])
+    expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(30 * 86_400_000 - 1000)
   })
 
   it('does not record failed sends, so they are retried next poll', async () => {

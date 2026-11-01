@@ -25,28 +25,39 @@ export interface GdacsEventProps {
 export type GdacsEvent = Feature<Geometry, GdacsEventProps>
 export type GdacsCollection = FeatureCollection<Geometry, GdacsEventProps>
 
+export const MAX_AREAS = 10
+
 export interface WatchArea {
+  id: string
   label: string
   lon: number
   lat: number
   radiusKm: number
+  hazards: HazardType[]
+  minAlert: AlertLevel
+  /** eventKey -> highest alert level already sent for this area, so we only re-alert on escalation */
+  notified: Record<string, { level: AlertLevel; at: string }>
 }
 
+export interface PushChannel {
+  kind: 'push'
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+}
+
+/** Ways to reach a subscriber. Email and Telegram join this union later. */
+export type Channel = PushChannel
+
+/** One device or person: where they want alerts for, and how to reach them. */
 export interface Subscription {
   id: string
   createdAt: string
-  area: WatchArea
-  hazards: HazardType[]
-  minAlert: AlertLevel
-  push: {
-    endpoint: string
-    keys: { p256dh: string; auth: string }
-  }
-  /** eventKey -> highest alert level already notified, so we only re-alert on escalation */
-  notified: Record<string, AlertLevel>
+  channels: Channel[]
+  areas: WatchArea[]
 }
 
 export interface Store {
+  version: 2
   subscriptions: Subscription[]
 }
 

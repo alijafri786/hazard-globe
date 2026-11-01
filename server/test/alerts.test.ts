@@ -2,7 +2,7 @@ import type { Geometry } from 'geojson'
 import { describe, expect, it, vi } from 'vitest'
 import { planAlerts } from '../src/alerts.js'
 import type { AlertLevel, GdacsEvent } from '../src/types.js'
-import { makeEvent, makeSub, square } from './fixtures.js'
+import { alerted, makeArea, makeEvent, makeSub, square } from './fixtures.js'
 
 const noGeometry = async () => [] as Geometry[]
 
@@ -13,7 +13,7 @@ describe('planAlerts', () => {
     const [alert, ...rest] = await planAlerts([event], [sub], noGeometry)
 
     expect(rest).toHaveLength(0)
-    expect(alert).toMatchObject({ sub, eventKey: 'TC-1000', level: 'Orange' })
+    expect(alert).toMatchObject({ sub, eventKey: 'TC-1000', level: 'Orange', areaIds: ['area-1'] })
     expect(alert.payload).toEqual({
       title: 'ORANGE Tropical cyclone alert',
       body: 'Alpha — Atlantis\nNear: Home',
@@ -24,19 +24,19 @@ describe('planAlerts', () => {
 
   it('does not repeat an alert at the same level', async () => {
     const geometryFor = vi.fn(noGeometry)
-    const sub = makeSub({ notified: { 'TC-1000': 'Orange' } })
+    const sub = makeSub({ area: { notified: alerted('TC-1000', 'Orange') } })
     expect(await planAlerts([makeEvent()], [sub], geometryFor)).toEqual([])
     expect(geometryFor).not.toHaveBeenCalled()
   })
 
   it('alerts again when the level escalates', async () => {
-    const sub = makeSub({ notified: { 'TC-1000': 'Orange' } })
+    const sub = makeSub({ area: { notified: alerted('TC-1000', 'Orange') } })
     const alerts = await planAlerts([makeEvent({ alertlevel: 'Red' })], [sub], noGeometry)
     expect(alerts.map((a) => a.level)).toEqual(['Red'])
   })
 
   it('does not alert when the level drops', async () => {
-    const sub = makeSub({ minAlert: 'Green', notified: { 'TC-1000': 'Red' } })
+    const sub = makeSub({ area: { minAlert: 'Green', notified: alerted('TC-1000', 'Red') } })
     expect(await planAlerts([makeEvent({ alertlevel: 'Orange' })], [sub], noGeometry)).toEqual([])
   })
 
@@ -46,18 +46,18 @@ describe('planAlerts', () => {
     ['Red', 'Orange', true],
     ['Orange', 'Red', false],
     ['Green', 'Green', true],
-  ])('a %s event for a subscriber wanting %s+ alerts: %s', async (level, minAlert, expected) => {
-    const alerts = await planAlerts([makeEvent({ alertlevel: level })], [makeSub({ minAlert })], noGeometry)
+  ])('a %s event for an area wanting %s+ alerts: %s', async (level, minAlert, expected) => {
+    const alerts = await planAlerts([makeEvent({ alertlevel: level })], [makeSub({ area: { minAlert } })], noGeometry)
     expect(alerts.length > 0).toBe(expected)
   })
 
   it('ignores alert levels it does not know', async () => {
     const event = makeEvent({ alertlevel: 'Purple' as AlertLevel })
-    expect(await planAlerts([event], [makeSub({ minAlert: 'Green' })], noGeometry)).toEqual([])
+    expect(await planAlerts([event], [makeSub({ area: { minAlert: 'Green' } })], noGeometry)).toEqual([])
   })
 
-  it('skips hazard types the subscriber did not choose', async () => {
-    const sub = makeSub({ hazards: ['TC'] })
+  it('skips hazard types the area did not choose', async () => {
+    const sub = makeSub({ area: { hazards: ['TC'] } })
     expect(await planAlerts([makeEvent({ eventtype: 'FL' })], [sub], noGeometry)).toEqual([])
   })
 
@@ -87,16 +87,10 @@ describe('planAlerts', () => {
 
   it('fetches geometry once per event however many subscribers want it', async () => {
     const geometryFor = vi.fn(noGeometry)
-    const subs = [makeSub({ id: 'a' }), makeSub({ id: 'b' }), makeSub({ id: 'c', hazards: ['FL'] })]
+    const subs = [makeSub({ id: 'a' }), makeSub({ id: 'b' }), makeSub({ id: 'c', area: { hazards: ['FL'] } })]
     const alerts = await planAlerts([makeEvent()], subs, geometryFor)
     expect(geometryFor).toHaveBeenCalledTimes(1)
     expect(alerts.map((a) => a.sub.id)).toEqual(['a', 'b'])
-  })
-
-  it('names each subscriber’s own area in the message', async () => {
-    const subs = [makeSub({ id: 'a', area: { label: 'Home' } }), makeSub({ id: 'b', area: { label: "Mum's" } })]
-    const alerts = await planAlerts([makeEvent()], subs, noGeometry)
-    expect(alerts.map((a) => a.payload.body.split('\n').at(-1))).toEqual(['Near: Home', "Near: Mum's"])
   })
 
   it('falls back to the hazard name when the event has no name', async () => {
@@ -104,5 +98,32 @@ describe('planAlerts', () => {
     const [alert] = await planAlerts([event], [makeSub()], noGeometry)
     expect(alert.payload.title).toBe('RED Flood alert')
     expect(alert.payload.body).toBe('Flood\nNear: Home')
+  })
+
+  describe('with several areas', () => {
+    const home = makeArea({ id: 'home', label: 'Home' })
+    const work = makeArea({ id: 'work', label: 'Work', lon: 0.5 })
+    const faraway = makeArea({ id: 'far', label: 'Far away', lon: 50 })
+
+    it('sends one alert naming every area the event touches', async () => {
+      const alerts = await planAlerts([makeEvent()], [makeSub({ areas: [home, faraway, work] })], noGeometry)
+      expect(alerts).toHaveLength(1)
+      expect(alerts[0].areaIds).toEqual(['home', 'work'])
+      expect(alerts[0].payload.body).toBe('Alpha\nNear: Home, Work')
+    })
+
+    it('applies each area’s own minimum level and hazards', async () => {
+      const redOnly = { ...work, minAlert: 'Red' as const }
+      const floodsOnly = makeArea({ id: 'fl', label: 'Floods', hazards: ['FL'] })
+      const alerts = await planAlerts([makeEvent()], [makeSub({ areas: [home, redOnly, floodsOnly] })], noGeometry)
+      expect(alerts[0].areaIds).toEqual(['home'])
+    })
+
+    it('alerts an area that has not heard about an event another area already has', async () => {
+      const told = { ...home, notified: alerted('TC-1000', 'Orange') }
+      const alerts = await planAlerts([makeEvent()], [makeSub({ areas: [told, work] })], noGeometry)
+      expect(alerts[0].areaIds).toEqual(['work'])
+      expect(alerts[0].payload.body).toBe('Alpha\nNear: Work')
+    })
   })
 })

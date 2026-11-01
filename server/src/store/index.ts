@@ -13,8 +13,10 @@ export interface SubscriptionStore {
   count(): Promise<number>
   upsert(sub: Subscription): Promise<void>
   remove(id: string): Promise<boolean>
-  /** Remember the highest level a subscriber has been alerted at for an event. */
-  recordNotified(id: string, eventKey: string, level: AlertLevel): Promise<void>
+  /** Remember the level each of these areas has been alerted at for an event. */
+  recordNotified(id: string, areaIds: string[], eventKey: string, level: AlertLevel): Promise<void>
+  /** Forget alerts sent before `before` for events no longer in `activeKeys`. Returns how many went. */
+  pruneNotified(activeKeys: Set<string>, before: Date): Promise<number>
 }
 
 export function openStore(): Promise<SubscriptionStore> {
