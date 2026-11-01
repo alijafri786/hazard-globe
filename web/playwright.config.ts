@@ -11,7 +11,10 @@ const dataFile = (process.env.E2E_DATA_FILE ??= join(tmpdir(), `hazard-globe-e2e
 export default defineConfig({
   testDir: 'e2e',
   timeout: 60_000,
-  fullyParallel: false, // one shared server; tests create their own subscriptions but share rate limits
+  // One at a time: tests share one server and its rate limits, and several software-rendered globes at once
+  // slow each other past their timeouts
+  fullyParallel: false,
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {

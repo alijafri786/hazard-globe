@@ -6,6 +6,7 @@ import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useFlightLayer } from './composables/useFlightLayer'
+import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
 import { useHazardLayer } from './composables/useHazardLayer'
 import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
@@ -15,6 +16,7 @@ const globeEl = ref<HTMLElement | null>(null)
 const viewer = useViewer(globeEl)
 const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
+const forecast = useFloodForecastLayer(viewer, timeline)
 const flights = useFlightLayer(viewer)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
@@ -47,7 +49,7 @@ const tab = ref<'events' | 'flights' | 'alerts'>('events')
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
       <AlertSetup v-else :watch="watchAreas" />
 

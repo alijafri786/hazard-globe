@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { formatDay, type useTimeline } from '../composables/useTimeline'
 import { ALERT_COLOURS, HAZARD_LABELS, type HazardType } from '../types'
+import FloodForecastControls from './FloodForecastControls.vue'
 import TimelineControls from './TimelineControls.vue'
 
-const props = defineProps<{ layer: ReturnType<typeof useHazardLayer>; timeline: ReturnType<typeof useTimeline> }>()
+const props = defineProps<{
+  layer: ReturnType<typeof useHazardLayer>
+  timeline: ReturnType<typeof useTimeline>
+  forecast: ReturnType<typeof useFloodForecastLayer>
+}>()
 const { events, fetchedAt, days, loading, error, visible, refresh, flyTo } = props.layer
 const { mode, day } = props.timeline
 
@@ -37,6 +43,8 @@ const empty = computed(() =>
     <div class="legend">
       <span v-for="(c, level) in ALERT_COLOURS" :key="level"><i :style="{ background: c }" />{{ level }}</span>
     </div>
+
+    <FloodForecastControls :forecast="forecast" :timeline="timeline" />
 
     <div class="meta">
       <span v-if="mode === 'history' && !loading">

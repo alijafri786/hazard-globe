@@ -6,6 +6,8 @@ Add up to 10 watch areas: pick each point on the globe (or use your location), t
 
 Switch the Events tab to **History** to look back over the last 7, 30 or 90 days: drag the slider or press play to see which storms and floods were active on each day.
 
+Turn on the **flood forecast** overlay to see where rivers are forecast to rise over the next 15 days, from the Copernicus Global Flood Awareness System (GloFAS). It's for information only, not a flood warning, and it doesn't trigger alerts.
+
 You can also switch on **live flights** to see aircraft worldwide, coloured by altitude, and search by callsign.
 
 > ⚠️ **Not an official warning service.** Data comes from [GDACS](https://www.gdacs.org) and can be delayed, incomplete or wrong. Always follow your national meteorological and civil protection agencies.
@@ -113,6 +115,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
 - **Be kind to GDACS:** the poll interval is clamped to a minimum of 10 minutes. History offers three fixed ranges, each ending today, and the server fetches each from GDACS at most once every 15 minutes however many people are looking.
 - **History days** are UTC days, as GDACS dates are. An event shows on every day between its start and its latest update.
+- **GloFAS overlay:** browsers fetch map images directly from the public GloFAS map service (`ows.globalfloods.eu`), with no key needed. Nothing is proxied or stored by this server. To keep the load on GloFAS light, images are fetched only while a layer is switched on, in 512-pixel tiles, and no more detailed than the forecast grid needs. Clicking the map never queries GloFAS. The layers are hidden in History mode, because they show today's forecast.
 - **Storage:** the JSON store is fine for a few hundred subscribers (capped by `MAX_SUBSCRIBERS`); beyond that, use Postgres (see above). Both sit behind the `SubscriptionStore` interface in `server/src/store/` and are tested against the same suite, with Postgres run in-process via PGlite. If the JSON file is ever corrupted, the server refuses to start rather than overwrite it.
 - **Abuse:** API routes are rate-limited per IP in memory (subscribing 20/hour, test alerts 5 per 10 minutes per subscription, footprint lookups 60/minute, everything else 300/minute). Behind a reverse proxy, set `TRUST_PROXY` so limits see real client IPs. With several server instances, each counts separately.
 - **Flights:** the server only calls OpenSky while someone has the layer switched on, and shares one cached snapshot between all visitors, so it stays inside OpenSky's daily credit limit. Between snapshots, planes are moved along their last reported heading, so positions are approximate. Aircraft on the ground are left out.
@@ -121,7 +124,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 ## Roadmap
 
 - [ ] Forecast cones from NOAA NHC / JTWC for cyclones
-- [ ] Flood forecasts (Copernicus GloFAS) — check licence terms before redistributing
+- [x] Flood forecasts (Copernicus GloFAS), as a map overlay
 - [x] Multiple watch areas per device
 - [x] Email and Telegram delivery channels
 - [x] Time slider for event history
@@ -136,3 +139,5 @@ Issues and PRs welcome. Please keep the "not an official warning" disclaimer vis
 ## Licence
 
 MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network.
+
+Flood forecasts: generated using Copernicus Emergency Management Service information, from [GloFAS](https://global-flood.emergency.copernicus.eu). They're shown under the [CEMS-FLOODS licence](https://ewds.climate.copernicus.eu/licences/cems-floods). It allows distribution and communication to the public, provided this credit is shown (the app shows it with the overlay, and on the map). The licence says the data is for information purposes only, is not a flood warning, and comes without warranty. The app shows the public layers unmodified. Before a commercial deployment, check the current terms: the licence doesn't address commercial use explicitly, and Copernicus moved some data stores to CC BY 4.0 in 2025.
