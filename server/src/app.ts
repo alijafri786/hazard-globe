@@ -12,12 +12,17 @@ import { HISTORY_DAYS, isHistoryDays, type HistoryDays } from './history.js'
 import { escapeHtml, page } from './html.js'
 import type { Poller } from './poller.js'
 import { clientIp, createLimiter, rateLimit } from './ratelimit.js'
+import { isSatelliteGroup, SATELLITE_GROUPS, type SatelliteGroup } from './satellites.js'
+import type { Ships } from './ships.js'
+import { isIcao24 } from './tracks.js'
 import type { SubscriptionStore } from './store/index.js'
 import type {
   Channel,
   EmailChannel,
+  FlightTrack,
   GdacsCollection,
   HazardType,
+  SatellitesSnapshot,
   Subscription,
   TelegramChannel,
   WatchArea,
@@ -29,6 +34,12 @@ export interface AppDeps {
   poller: Pick<Poller, 'latestEvents' | 'pollOnce'>
   /** Past events for the time slider (see history.ts) */
   history: (days: HistoryDays) => Promise<GdacsCollection>
+  /** Satellite orbits by CelesTrak group (see satellites.ts) */
+  satellites: (group: SatelliteGroup) => Promise<SatellitesSnapshot | null>
+  /** An aircraft's path on its current flight (see tracks.ts) */
+  flightTrack: (icao24: string) => Promise<FlightTrack | null>
+  /** Present when ships are set up (an AISStream key) */
+  ships?: Pick<Ships, 'snapshot' | 'details'>
   deliver: Deliver
   pushEnabled: boolean
   /** Present when email is set up */
@@ -160,6 +171,47 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     const snapshot = await getFlights()
     if (!snapshot) return c.json({ error: 'Flight data unavailable, try again shortly' }, 503)
     c.header('Cache-Control', 'public, max-age=60')
+    return c.json(snapshot)
+  })
+
+  // An aircraft not looked up lately spends OpenSky credits, so stop anyone walking through them
+  app.get(
+    '/api/flights/:icao24/track',
+    rateLimit({ windowMs: MINUTE, max: 30, key: byIp, now }),
+    compress(),
+    async (c) => {
+      const icao24 = c.req.param('icao24')
+      if (!isIcao24(icao24)) return c.json({ error: 'icao24 must be 6 lowercase hex digits' }, 400)
+      const track = await deps.flightTrack(icao24)
+      c.header('Cache-Control', 'public, max-age=120')
+      return track ? c.json(track) : c.json({ error: 'No track available for this aircraft' }, 404)
+    },
+  )
+
+  const noShips = { error: "Ships aren't set up on this server" }
+
+  // Tens of thousands of ships: a few MB before compression
+  app.get('/api/ships', compress(), (c) => {
+    if (!deps.ships) return c.json(noShips, 501)
+    c.header('Cache-Control', 'public, max-age=60')
+    return c.json(deps.ships.snapshot())
+  })
+
+  app.get('/api/ships/:mmsi', (c) => {
+    if (!deps.ships) return c.json(noShips, 501)
+    const mmsi = Number(c.req.param('mmsi'))
+    if (!Number.isInteger(mmsi) || mmsi <= 0 || mmsi > 999_999_999) return c.json({ error: 'bad MMSI' }, 400)
+    const ship = deps.ships.details(mmsi)
+    return ship ? c.json(ship) : c.json({ error: 'No recent report from this ship' }, 404)
+  })
+
+  // Starlink alone is ~4 MB of JSON before compression
+  app.get('/api/satellites/:group', compress(), async (c) => {
+    const group = c.req.param('group')
+    if (!isSatelliteGroup(group)) return c.json({ error: `group must be one of ${SATELLITE_GROUPS.join(', ')}` }, 400)
+    const snapshot = await deps.satellites(group).catch(() => null)
+    if (!snapshot) return c.json({ error: 'Satellite data unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=1800')
     return c.json(snapshot)
   })
 

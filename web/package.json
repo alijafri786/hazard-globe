@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "cesium": "^1.122.0",
+    "satellite.js": "^6.0.2",
     "vue": "^3.5.0"
   },
   "devDependencies": {

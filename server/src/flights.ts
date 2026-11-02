@@ -15,6 +15,13 @@ export const flightsRefreshSeconds = Math.max(
   config.opensky.refreshSeconds ?? (flightsAuthenticated ? 120 : 900),
 )
 
+// A track costs 4 credits too, so tracks get what's left of the day's credits (with a margin) after a snapshot
+// every refreshSeconds all day. Anonymous access has nothing left over.
+const DAILY_CREDITS = 4000
+export const tracksPerDay = flightsAuthenticated
+  ? Math.max(0, Math.floor((DAILY_CREDITS * 0.9 - (86_400 / flightsRefreshSeconds) * 4) / 4))
+  : 0
+
 class RateLimited extends Error {
   constructor() {
     super('OpenSky credit limit reached')
@@ -23,7 +30,7 @@ class RateLimited extends Error {
 
 let token: { value: string; expiresAt: number } | null = null
 
-async function getToken(): Promise<string> {
+export async function getToken(): Promise<string> {
   if (token && Date.now() < token.expiresAt) return token.value
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
@@ -108,6 +115,7 @@ async function refresh(): Promise<void> {
     latest = {
       time: new Date(data.time * 1000).toISOString(),
       refreshSeconds: flightsRefreshSeconds,
+      tracks: tracksPerDay > 0,
       flights: toFlights(data.states ?? []),
     }
     nextAttemptAt = started + flightsRefreshSeconds * 1000

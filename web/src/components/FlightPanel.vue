@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { useFlightDetails } from '../composables/useFlightDetails'
 import { ALTITUDE_BANDS, type useFlightLayer } from '../composables/useFlightLayer'
+import type { TimelineMode } from '../composables/useTimeline'
+import FlightDetails from './FlightDetails.vue'
 
-const props = defineProps<{ layer: ReturnType<typeof useFlightLayer> }>()
-const { enabled, count, snapshotTime, refreshSeconds, loading, error, query, matches, refresh, flyTo } = props.layer
+const props = defineProps<{
+  layer: ReturnType<typeof useFlightLayer>
+  card: ReturnType<typeof useFlightDetails>
+  mode: TimelineMode
+}>()
+const { enabled, count, snapshotTime, refreshSeconds, loading, error, query, matches, showCallsigns, refresh, flyTo } =
+  props.layer
 
 const updated = computed(() =>
   snapshotTime.value ? new Date(snapshotTime.value).toLocaleTimeString('en-GB', { timeStyle: 'short' }) : null,
@@ -16,12 +24,22 @@ const every = computed(() => {
 
 <template>
   <section>
+    <FlightDetails :flights="layer" :card="card" />
+
     <label class="toggle">
       <input v-model="enabled" type="checkbox" />
       Show live flights
     </label>
 
-    <template v-if="enabled">
+    <p v-if="enabled && mode === 'history'" class="note">
+      Flights are shown where they are now, so they're hidden while you look at history.
+    </p>
+    <template v-else-if="enabled">
+      <label class="toggle">
+        <input v-model="showCallsigns" type="checkbox" />
+        Show callsigns when zoomed in
+      </label>
+
       <div class="legend">
         <span v-for="b in ALTITUDE_BANDS" :key="b.label"><i :style="{ background: b.colour }" />{{ b.label }}</span>
       </div>
@@ -126,6 +144,13 @@ const every = computed(() => {
 
 .flight small {
   color: var(--muted);
+}
+
+.note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--orange);
 }
 
 .error {

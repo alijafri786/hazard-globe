@@ -35,6 +35,8 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   },
+  /** Ships from AISStream.io (free key); off without one */
+  aisstreamKey: process.env.AISSTREAM_API_KEY ?? '',
   opensky: {
     clientId: process.env.OPENSKY_CLIENT_ID ?? '',
     clientSecret: process.env.OPENSKY_CLIENT_SECRET ?? '',

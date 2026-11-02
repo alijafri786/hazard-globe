@@ -4,7 +4,7 @@ import type { AlertLevel, GdacsCollection, GdacsEvent, HazardType } from './type
 const BASE = 'https://www.gdacs.org/gdacsapi/api'
 const LEVELS: AlertLevel[] = ['Green', 'Orange', 'Red']
 const PAGE_SIZE = 100
-const USER_AGENT = 'hazard-globe (open-source; https://github.com/alijafri786/hazard-globe)'
+export const USER_AGENT = 'hazard-globe (open-source; https://github.com/alijafri786/hazard-globe)'
 // GDACS can take 30s+ to answer when busy, and a request with no timeout could block polling forever
 const TIMEOUT_MS = 60_000
 

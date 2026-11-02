@@ -118,5 +118,79 @@ export interface FlightsSnapshot {
   /** when OpenSky computed the positions */
   time: string
   refreshSeconds: number
+  /** whether /api/flights/:icao24/track can answer (it needs OpenSky credits to spare) */
+  tracks: boolean
   flights: Flight[]
+}
+
+/**
+ * [mmsi, name, AIS ship type, lon, lat, speed over ground kn, course °, heading °, seconds since its report]
+ * Speed, course and heading are null when the ship doesn't send them.
+ */
+export type Ship = [number, string, number, number, number, number | null, number | null, number | null, number]
+
+export interface ShipsSnapshot {
+  time: string
+  refreshSeconds: number
+  /** whether the stream from AISStream is open and working */
+  receiving: boolean
+  /** when this run of collecting began: positions build up over the first minutes */
+  collectingSince: string | null
+  error: string | null
+  ships: Ship[]
+}
+
+export interface ShipDetails {
+  mmsi: number
+  name: string
+  type: number
+  lon: number
+  lat: number
+  sog: number | null
+  cog: number | null
+  heading: number | null
+  /** AIS navigational status, e.g. 0 under way, 1 at anchor, 5 moored */
+  navStatus: number | null
+  seenAt: string
+  destination: string
+  callSign: string
+  imo: number | null
+  lengthM: number | null
+  widthM: number | null
+}
+
+/** [unix seconds, lon, lat, barometric altitude m] */
+export type TrackPoint = [number, number, number, number]
+
+export interface FlightTrack {
+  icao24: string
+  points: TrackPoint[]
+}
+
+/** A satellite's orbit as CelesTrak publishes it (OMM, mean elements for SGP4), trimmed to what SGP4 uses */
+export interface OrbitalElements {
+  OBJECT_NAME: string
+  /** International designator, e.g. 1998-067A */
+  OBJECT_ID: string
+  NORAD_CAT_ID: number
+  /** ISO time the elements are for, UTC without a zone */
+  EPOCH: string
+  /** Revolutions a day */
+  MEAN_MOTION: number
+  ECCENTRICITY: number
+  INCLINATION: number
+  RA_OF_ASC_NODE: number
+  ARG_OF_PERICENTER: number
+  MEAN_ANOMALY: number
+  BSTAR: number
+  MEAN_MOTION_DOT: number
+  MEAN_MOTION_DDOT: number
+  ELEMENT_SET_NO: number
+}
+
+export interface SatellitesSnapshot {
+  group: string
+  /** when CelesTrak was asked */
+  fetchedAt: string
+  satellites: OrbitalElements[]
 }

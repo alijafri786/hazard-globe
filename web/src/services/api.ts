@@ -2,7 +2,11 @@ import type {
   ChannelView,
   EventsResponse,
   FlightsResponse,
+  FlightTrack,
   HazardType,
+  SatellitesResponse,
+  ShipDetails,
+  ShipsResponse,
   ServerChannels,
   SubscriptionView,
   WatchArea,
@@ -40,6 +44,19 @@ export const api = {
     request<{ type: 'FeatureCollection'; features: unknown[] }>(`/api/events/${type}/${eventid}/${episodeid}/geometry`),
 
   flights: () => request<FlightsResponse>('/api/flights'),
+
+  /** Null when the server has no track for it */
+  flightTrack: (icao24: string) =>
+    request<FlightTrack>(`/api/flights/${icao24}/track`).catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 404) return null
+      throw err
+    }),
+
+  ships: () => request<ShipsResponse>('/api/ships'),
+
+  ship: (mmsi: number) => request<ShipDetails>(`/api/ships/${mmsi}`),
+
+  satellites: (group: string) => request<SatellitesResponse>(`/api/satellites/${group}`),
 
   publicKey: () => request<{ publicKey: string }>('/api/push/public-key'),
 

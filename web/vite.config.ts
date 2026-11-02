@@ -26,6 +26,8 @@ export default defineConfig({
       ],
     }),
   ],
+  // Only the satellite worker imports it, which Vite finds late and reloads the page for: name it up front
+  optimizeDeps: { include: ['satellite.js'] },
   server: {
     proxy: {
       // Overridden by the end-to-end tests, which run their own server next to any dev server

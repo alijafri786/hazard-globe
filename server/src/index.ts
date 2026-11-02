@@ -8,7 +8,10 @@ import { createEmailNotifier, type EmailNotifier, type Mailer } from './email.js
 import { createHistory } from './history.js'
 import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
+import { createSatellites } from './satellites.js'
+import { createShips } from './ships.js'
 import { openStore, storeKind } from './store/index.js'
+import { createTracks } from './tracks.js'
 import { createBot, createTelegramNotifier, telegramApi } from './telegram.js'
 import type { PushChannel } from './types.js'
 
@@ -46,13 +49,26 @@ if (config.telegram.botToken && !e2e) {
 
 const deliver = createDeliver(notifiers)
 const poller = createPoller(store, deliver)
-const app = createApp({ store, poller, history: createHistory(), deliver, email, telegramBot, pushEnabled: e2e || pushEnabled })
+const app = createApp({
+  store,
+  poller,
+  history: createHistory(),
+  satellites: createSatellites(),
+  flightTrack: createTracks(),
+  // Never in end-to-end runs: they mustn't open a real stream
+  ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
+  deliver,
+  email,
+  telegramBot,
+  pushEnabled: e2e || pushEnabled,
+})
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   const channels = [
     `push ${pushEnabled ? 'on' : 'OFF — set VAPID keys'}`,
     `email ${email ? 'on' : 'off'}`,
     `telegram ${telegramBot ? `@${telegramBot}` : 'off'}`,
+    `ships ${config.aisstreamKey ? 'on' : 'off'}`,
   ]
   const mode = e2e ? 'E2E mode, no polling' : `${channels.join(', ')}, ${storeKind} store`
   console.log(`hazard-globe server on http://localhost:${info.port} (${mode})`)
