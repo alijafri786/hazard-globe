@@ -74,3 +74,21 @@ test('wind: says so when the server has none', async ({ page }) => {
   await page.getByLabel('Show wind, moving').check()
   await expect(page.getByText("Couldn't load the wind: Wind data unavailable, try again shortly")).toBeVisible()
 })
+
+test('wind: keeps drawing on the flat 2D map', async ({ page }) => {
+  await stubWind(page)
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'Weather' }).click()
+  await page.getByLabel('Show wind, moving').check()
+  await expect.poll(() => drawnPixels(page), { timeout: 15_000 }).toBeGreaterThan(200)
+
+  const picker = page.locator('.cesium-sceneModePicker-wrapper > button').first()
+  await picker.click()
+  await page.getByRole('button', { name: '2D', exact: true }).last().click()
+  await expect(picker).toHaveAttribute('title', '2D')
+  await page.getByRole('button', { name: 'Zoom in' }).click({ delay: 600 })
+  await expect.poll(() => drawnPixels(page), { timeout: 15_000 }).toBeGreaterThan(200)
+  expect(errors).toEqual([])
+})

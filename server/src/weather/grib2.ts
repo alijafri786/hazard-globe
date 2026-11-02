@@ -28,6 +28,8 @@ class Bits {
   ) {}
 
   read(n: number): number {
+    // Reading past the end would give zeros, which decode to plausible but wrong values
+    if (this.pos + ((this.bit + n + 7) >> 3) > this.bytes.length) throw new Error('GRIB2: data section ends early')
     let v = 0
     for (let i = 0; i < n; i++) {
       const byte = this.bytes[this.pos + (this.bit >> 3)]
@@ -139,8 +141,11 @@ export function decodeGrib2(buffer: Uint8Array): GribField[] {
     const discipline = view.getUint8(pos + 6)
     const length = Number(view.getBigUint64(pos + 8))
     const end = pos + length
+    // A wrong length would read into the next message, or never move on
+    if (length < 16 + 4 || end > buffer.length) throw new Error('GRIB2: message length does not fit the file')
+    if (view.getUint32(end - 4) !== 0x37373737) throw new Error('GRIB2: message does not end with 7777')
 
-    let referenceTime = new Date(NaN)
+    let referenceTime = new Date(Number.NaN)
     let grid: GribField['grid'] | null = null
     let product: Pick<GribField, 'category' | 'parameter' | 'levelType' | 'levelValue' | 'forecastHours'> | null = null
     let packing: Packing | null = null
@@ -148,6 +153,7 @@ export function decodeGrib2(buffer: Uint8Array): GribField[] {
     let p = pos + 16
     while (p < end - 4) {
       const len = view.getUint32(p)
+      if (len < 5 || p + len > end - 4) throw new Error('GRIB2: section length does not fit the message')
       const section = view.getUint8(p + 4)
       const s = new DataView(buffer.buffer, buffer.byteOffset + p, len)
       if (section === 1) {
@@ -177,7 +183,7 @@ export function decodeGrib2(buffer: Uint8Array): GribField[] {
         product = {
           category: s.getUint8(9),
           parameter: s.getUint8(10),
-          forecastHours: s.getUint32(18) * (hoursPerUnit[unit] ?? NaN),
+          forecastHours: s.getUint32(18) * (hoursPerUnit[unit] ?? Number.NaN),
           levelType: s.getUint8(22),
           levelValue: s.getUint32(24) / 10 ** signed(s, 23, 1),
         }

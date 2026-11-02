@@ -66,8 +66,11 @@ export function useWindLayer(viewer: ShallowRef<Viewer | null>, timeline: Return
   watch(timeline.mode, show)
 
   onBeforeUnmount(() => {
+    // Off first, so a load still on its way doesn't bring the particles back
+    enabled.value = false
     clearTimeout(refreshTimer)
     particles?.destroy()
+    particles = null
   })
 
   return { enabled, grid, loading, error }

@@ -40,6 +40,7 @@ export class WindParticles {
   private readonly ctx: CanvasRenderingContext2D
   private readonly particles: Particle[] = []
   private readonly lastView = new Matrix4()
+  private readonly lastProjection = new Matrix4()
   private readonly scratch = new Cartesian3()
   private u = new Float32Array(0)
   private v = new Float32Array(0)
@@ -144,8 +145,13 @@ export class WindParticles {
 
     const { scene, camera } = this.viewer
     const resized = this.resize()
-    const moved = !Matrix4.equalsEpsilon(camera.viewMatrix, this.lastView, 1e-9)
+    // Zooming a 2D map changes only the projection, so both count
+    const projection = camera.frustum.projectionMatrix
+    const moved =
+      !Matrix4.equalsEpsilon(camera.viewMatrix, this.lastView, 1e-9) ||
+      !Matrix4.equalsEpsilon(projection, this.lastProjection, 1e-12)
     Matrix4.clone(camera.viewMatrix, this.lastView)
+    Matrix4.clone(projection, this.lastProjection)
     const ctx = this.ctx
     if (resized || moved) {
       // Old trails would be in the wrong place on screen
@@ -175,8 +181,11 @@ export class WindParticles {
       const speed = Math.hypot(u, v)
       p.lat = Math.max(-89.9, Math.min(89.9, p.lat + v * step))
       p.lon += (u * step) / Math.max(0.05, Math.cos(CesiumMath.toRadians(p.lat)))
-      if (p.lon > 180) p.lon -= 360
-      else if (p.lon < -180) p.lon += 360
+      if (p.lon > 180 || p.lon < -180) {
+        p.lon -= Math.sign(p.lon) * 360
+        // On a flat map it has jumped to the other edge: start its trail afresh rather than draw across
+        p.x = Number.NaN
+      }
 
       const world = Cartesian3.fromDegrees(p.lon, p.lat, 0, undefined, this.scratch)
       const screen = occluder && !occluder.isPointVisible(world) ? undefined : scene.cartesianToCanvasCoordinates(world)
