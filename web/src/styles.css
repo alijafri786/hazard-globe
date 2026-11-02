@@ -74,3 +74,14 @@ input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
 }
+
+/* Cesium's scene mode picker keeps its collapsed 2D/Columbus buttons laid out, invisibly, over the top of the
+   info box, and the empty space they take up swallowed clicks on the info box's close button. Only the
+   buttons showing take clicks. */
+.cesium-sceneModePicker-wrapper {
+  pointer-events: none;
+}
+
+.cesium-sceneModePicker-wrapper > button:not(.cesium-sceneModePicker-hidden) {
+  pointer-events: auto;
+}

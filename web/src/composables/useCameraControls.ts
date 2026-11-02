@@ -228,7 +228,10 @@ export function useCameraControls(viewer: ShallowRef<Viewer | null>) {
     (v) => {
       if (!v) return
       v.scene.postRender.addEventListener(() => {
-        const h = CesiumMath.toDegrees(v.camera.heading)
+        // No heading while the globe morphs between 3D and 2D; asking for it in degrees then stopped rendering
+        const radians = v.camera.heading as number | undefined
+        if (radians === undefined) return
+        const h = CesiumMath.toDegrees(radians)
         if (Math.abs(h - heading.value) > 0.5) heading.value = h
       })
       v.scene.morphComplete.addEventListener(() => {
