@@ -159,6 +159,20 @@ export interface ShipDetails {
   widthM: number | null
 }
 
+/** Wind 10 m above the ground on a regular grid, rows north to south, columns west to east from 180°W */
+export interface WindGrid {
+  /** when the GFS model run started */
+  run: string
+  /** the time the wind is forecast for */
+  validTime: string
+  width: number
+  height: number
+  bounds: { west: number; east: number; south: number; north: number }
+  /** eastward and northward wind, m/s */
+  u: number[]
+  v: number[]
+}
+
 /** [unix seconds, lon, lat, barometric altitude m] */
 export type TrackPoint = [number, number, number, number]
 

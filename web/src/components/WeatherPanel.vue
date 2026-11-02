@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { useCloudLayer } from '../composables/useCloudLayer'
+import type { useWindLayer } from '../composables/useWindLayer'
 import { compassPoint, formatTemperature, formatWind, localTime, type useTemperature } from '../composables/useTemperature'
 import type { TimelineMode } from '../composables/useTimeline'
 import { formatCoordinates, type Place } from '../services/geocoders'
 import { OPEN_METEO_URL } from '../services/openMeteo'
 import CloudControls from './CloudControls.vue'
+import WindControls from './WindControls.vue'
 
 const props = defineProps<{
   weather: ReturnType<typeof useTemperature>
   clouds: ReturnType<typeof useCloudLayer>
+  wind: ReturnType<typeof useWindLayer>
   mode: TimelineMode
   /** The place last found with the globe's search box */
   searched: Place | null
@@ -46,6 +49,7 @@ const searchedElsewhere = computed(() => {
     </p>
     <template v-else>
       <CloudControls :clouds="clouds" />
+      <WindControls :wind="wind" />
       <fieldset class="probe">
         <legend>Temperature anywhere</legend>
         <div class="actions">
