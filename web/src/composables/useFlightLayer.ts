@@ -21,6 +21,7 @@ import { project } from '../services/geo'
 import { escapeHtml } from '../services/html'
 import type { Flight } from '../types'
 import type { useGlobeClicks } from './useGlobeClicks'
+import type { useTimeline } from './useTimeline'
 
 // Snapshots can be 15 minutes old without OpenSky credentials, so planes are moved along their last
 // heading between snapshots. Past this, a plane may well have turned or landed: stop guessing.
@@ -73,7 +74,11 @@ function describe(f: Flight, snapshotTime: string): string {
     heading since then. Source: The OpenSky Network.</p>`
 }
 
-export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: ReturnType<typeof useGlobeClicks>) {
+export function useFlightLayer(
+  viewer: ShallowRef<Viewer | null>,
+  clicks: ReturnType<typeof useGlobeClicks>,
+  timeline: ReturnType<typeof useTimeline>,
+) {
   const enabled = ref(false)
   const flights = shallowRef<Flight[]>([])
   const snapshotTime = ref<string | null>(null)
@@ -101,6 +106,8 @@ export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: Return
   const scratch = new Cartesian3()
 
   const ageSeconds = () => (snapshotTime.value ? (Date.now() - Date.parse(snapshotTime.value)) / 1000 : 0)
+  /** Planes are where they are now, so they're hidden while looking at a past day */
+  const live = () => timeline.mode.value === 'live'
 
   const matches = computed(() => {
     const q = query.value.trim().toUpperCase()
@@ -118,12 +125,14 @@ export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: Return
     labels.removeAll()
     labelled = []
     const v = viewer.value
-    if (!v || !enabled.value || !showCallsigns.value) return
+    if (!v || !enabled.value || !showCallsigns.value || !live()) return
     if (v.camera.positionCartographic.height > LABELS_BELOW_M) return
     const view = v.camera.computeViewRectangle()
     if (!view) return
     const list = flights.value
-    for (let i = 0; i < list.length && labelled.length < MAX_LABELS; i++) {
+    // Only planes that are drawn: switched back on, the old list stays until the new snapshot is drawn
+    const drawn = Math.min(list.length, billboards.length)
+    for (let i = 0; i < drawn && labelled.length < MAX_LABELS; i++) {
       const f = list[i]
       if (!Rectangle.contains(view, Cartographic.fromDegrees(f[3], f[4], 0, scratchCartographic))) continue
       labels.add({
@@ -181,7 +190,7 @@ export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: Return
   }
 
   function tick() {
-    if (!enabled.value || document.hidden) return
+    if (!enabled.value || document.hidden || !live()) return
     const age = ageSeconds()
     // every plane has hit the estimate cap and stopped moving
     if (age > MAX_ESTIMATE_SECONDS + ESTIMATE_TICK_MS / 1000) return
@@ -292,13 +301,16 @@ export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: Return
 
   watch(enabled, (on) => {
     const v = viewer.value
-    billboards.show = on
+    billboards.show = on && live()
     clearInterval(tickTimer)
     if (on) {
       // reuse the last snapshot if it's still current, so toggling doesn't spend OpenSky credits
       const stale = !snapshotTime.value || ageSeconds() > (refreshSeconds.value ?? 0)
       if (stale) void refresh()
-      else render()
+      else {
+        render()
+        scheduleRefresh()
+      }
       tickTimer = setInterval(tick, ESTIMATE_TICK_MS)
     } else {
       clearTimeout(refreshTimer)
@@ -308,6 +320,14 @@ export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: Return
       deselect()
     }
     v?.scene.requestRender()
+  })
+
+  watch(timeline.mode, () => {
+    billboards.show = enabled.value && live()
+    if (live()) tick()
+    else deselect()
+    updateLabels()
+    viewer.value?.scene.requestRender()
   })
 
   onBeforeUnmount(() => {

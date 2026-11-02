@@ -139,7 +139,7 @@ describe('createShips', () => {
     expect(ships.details(3)).toBeNull()
   })
 
-  it('drops ships not heard from for 30 minutes', () => {
+  it('drops ships not heard from for 30 minutes, from the snapshot and from details', () => {
     const ships = createShips({ apiKey: 'k', connect })
     ships.snapshot()
     latest().receive(position(1))
@@ -147,6 +147,9 @@ describe('createShips', () => {
     latest().receive(position(2))
     expect(ships.snapshot().ships.map((s) => s[0])).toEqual([1, 2])
     vi.advanceTimersByTime(11 * MINUTE)
+    // Asked about directly before any snapshot has pruned it
+    expect(ships.details(1)).toBeNull()
+    expect(ships.details(2)).not.toBeNull()
     expect(ships.snapshot().ships.map((s) => s[0])).toEqual([2])
   })
 

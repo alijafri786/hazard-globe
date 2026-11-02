@@ -267,7 +267,7 @@ export function createShips({
     details(mmsi: number): ShipDetails | null {
       asked()
       const s = ships.get(mmsi)
-      if (!s) return null
+      if (!s || Date.now() - s.seenAt > STALE_MS) return null // the snapshot would have dropped it too
       const { seenAt, ...rest } = s
       return { ...rest, seenAt: new Date(seenAt).toISOString() }
     },

@@ -181,16 +181,20 @@ export function useShipLayer(
   function tick() {
     if (!enabled.value || document.hidden || !live()) return
     const since = sinceSnapshot()
-    ships.value.forEach((s, i) => {
+    // Only ships that are drawn: switched back on, the old list stays until the new snapshot is drawn
+    for (let i = 0; i < Math.min(ships.value.length, billboards.length); i++) {
+      const s = ships.value[i]
       if (s[5] && s[5] >= MOVING_KNOTS) billboards.get(i).position = estimatedPosition(s, since, scratch)
-    })
+    }
     viewer.value?.scene.requestRender()
   }
 
   function scheduleRefresh() {
     clearTimeout(refreshTimer)
     if (!enabled.value || unavailable.value) return
-    refreshTimer = setTimeout(() => void refresh(), refreshSeconds * 1000 + 5_000)
+    // shortly after the server's next snapshot is due
+    const due = snapshotTime.value ? Date.parse(snapshotTime.value) + refreshSeconds * 1000 + 5_000 : 0
+    refreshTimer = setTimeout(() => void refresh(), Math.max(5_000, due - Date.now()))
   }
 
   async function refresh() {
@@ -287,7 +291,10 @@ export function useShipLayer(
     if (on) {
       const stale = !snapshotTime.value || sinceSnapshot() > refreshSeconds
       if (stale) void refresh()
-      else render()
+      else {
+        render()
+        scheduleRefresh()
+      }
       tickTimer = setInterval(tick, ESTIMATE_TICK_MS)
     } else {
       billboards.removeAll()

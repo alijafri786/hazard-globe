@@ -153,3 +153,21 @@ test('satellites: says so when the server has none', async ({ page }) => {
   await page.getByLabel('Weather').check()
   await expect(page.getByText("Couldn't load some satellites: Satellite data unavailable, try again shortly")).toBeVisible()
 })
+
+test('satellites: groups still switched on are fetched again once their copy is 2 hours old', async ({ page }) => {
+  await page.clock.install()
+  const asked = await stubSatellites(page)
+  await openSpace(page)
+  await page.getByLabel('Space stations').check()
+  await expect(status(page)).toHaveText('1 satellite, moving live')
+  await page.getByLabel('Brightest').check()
+  await page.getByLabel('Brightest').uncheck()
+  expect(asked).toEqual(['stations', 'visual'])
+
+  await page.clock.fastForward('01:50:00')
+  expect(asked).toEqual(['stations', 'visual'])
+  await page.clock.fastForward('00:20:00')
+  // Only what's switched on
+  await expect.poll(() => asked).toEqual(['stations', 'visual', 'stations'])
+  await expect(status(page)).toHaveText('1 satellite, moving live')
+})

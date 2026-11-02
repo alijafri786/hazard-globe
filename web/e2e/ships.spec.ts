@@ -125,3 +125,18 @@ test('ships: hidden in history, which is about past days', async ({ page }) => {
   await page.getByRole('button', { name: 'Back to live' }).click()
   await expect(credits(page)).toContainText('Ships: AISStream.io')
 })
+
+test('ships: switched off and on again, the snapshot in hand is used and the next one is still fetched', async ({
+  page,
+}) => {
+  await page.clock.install()
+  const asked = await stubShips(page, snapshot())
+  await openShips(page)
+  await expect(status(page)).toContainText('3 ships')
+  await page.getByLabel('Show ships').uncheck()
+  await page.getByLabel('Show ships').check()
+  expect(asked.filter((p) => p === '/api/ships')).toHaveLength(1) // reused, not fetched again
+
+  await page.clock.fastForward('00:02:10') // past the snapshot's 2 minutes
+  await expect.poll(() => asked.filter((p) => p === '/api/ships').length).toBe(2)
+})
