@@ -31,7 +31,7 @@ const forecast = useFloodForecastLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
-const flights = useFlightLayer(viewer, clicks)
+const flights = useFlightLayer(viewer, clicks, timeline)
 const flightCard = useFlightDetails(viewer, flights)
 const satellites = useSatelliteLayer(viewer, timeline, clicks)
 const ships = useShipLayer(viewer, timeline, clicks)
@@ -105,7 +105,7 @@ watch(search.found, (place) => {
         :mode="timeline.mode.value"
         :searched="search.found.value"
       />
-      <FlightPanel v-else-if="tab === 'flights'" :layer="flights" :card="flightCard" />
+      <FlightPanel v-else-if="tab === 'flights'" :layer="flights" :card="flightCard" :mode="timeline.mode.value" />
       <template v-else-if="tab === 'space'">
         <ShipPanel :layer="ships" :mode="timeline.mode.value" />
         <SatellitePanel :layer="satellites" :mode="timeline.mode.value" />

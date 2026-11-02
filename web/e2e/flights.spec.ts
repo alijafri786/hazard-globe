@@ -30,10 +30,11 @@ const aircraft: Record<string, unknown> = {
 }
 
 async function stubFlights(page: Page, { tracks = true } = {}) {
-  const asked = { adsbdb: [] as string[], tracks: [] as string[] }
+  /** What the next snapshot holds: tests change it to have planes land */
+  const asked = { adsbdb: [] as string[], tracks: [] as string[], flights: [jetblue, reused, mystery] }
   await page.route(/\/api\/flights$/, (r) =>
     r.fulfill({
-      json: { time: new Date().toISOString(), refreshSeconds: 120, tracks, flights: [jetblue, reused, mystery] },
+      json: { time: new Date().toISOString(), refreshSeconds: 120, tracks, flights: asked.flights },
     }),
   )
   await page.route(/\/api\/flights\/\w+\/track$/, (r) => {
@@ -140,4 +141,47 @@ test('clicking a plane on the globe opens its details in the Flights tab', async
     await expect(page.getByRole('tab', { name: 'Flights' })).toHaveAttribute('aria-selected', 'true', { timeout: 1_000 })
   }).toPass({ timeout: 10_000 })
   await expect(card(page).locator('.callsign')).toHaveText('JBU1107')
+})
+
+test('the selected plane’s path is asked for again with each snapshot, and a plane that drops out says so', async ({
+  page,
+}) => {
+  const asked = await stubFlights(page)
+  await page.goto('/')
+  await openFlight(page, 'JBU1107')
+  await expect(card(page)).toContainText('The coloured line is the path it has flown')
+  expect(asked.tracks).toEqual(['a4c592'])
+
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await expect.poll(() => asked.tracks).toEqual(['a4c592', 'a4c592'])
+
+  // It's landed: no longer in the snapshot, so no line is drawn to where it was (or anywhere else)
+  asked.flights = [reused, mystery]
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await expect(card(page)).toContainText('No longer in the latest report: it may have landed.')
+  expect(asked.tracks).toHaveLength(2) // and not asked for while it's gone
+  await page.waitForTimeout(500)
+  expect(errors).toEqual([])
+})
+
+test('flights are hidden in History, details and all, and come back with live', async ({ page }) => {
+  await stubFlights(page)
+  await page.route(/\/api\/events\/history/, (r) =>
+    r.fulfill({ json: { fetchedAt: new Date().toISOString(), days: 30, type: 'FeatureCollection', features: [] } }),
+  )
+  await page.goto('/')
+  await openFlight(page, 'JBU1107')
+  await expect(card(page)).toBeVisible()
+
+  await page.getByRole('tab', { name: 'Events' }).click()
+  await page.getByRole('button', { name: 'History' }).click()
+  await page.getByRole('tab', { name: 'Flights' }).click()
+  await expect(page.getByText("Flights are shown where they are now, so they're hidden while you look at history.")).toBeVisible()
+  await expect(card(page)).toBeHidden()
+  await expect(page.locator('.cesium-infoBox-title')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Back to live' }).click()
+  await expect(page.getByText(/^3 aircraft · reported/)).toBeVisible()
 })

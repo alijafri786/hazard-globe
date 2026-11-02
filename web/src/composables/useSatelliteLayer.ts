@@ -46,6 +46,9 @@ const CLASS_COLOURS = Object.fromEntries(
 const EARTH_RADIUS_KM = 6_378.137
 const MU = 398_600.4418 // Earth's gravitational parameter, km³/s²
 const TICK_MS = 1_000
+/** The server refreshes from CelesTrak every 2 hours; enabled groups are fetched again once that old */
+const GROUP_REFRESH_MS = 2 * 60 * 60_000
+const REFRESH_CHECK_MS = 10 * 60_000
 const DESCRIBE_EVERY_TICKS = 5 // the info box is rewritten, so not every second
 const SCALE_BY_DISTANCE = new NearFarScalar(1e6, 1.6, 4e7, 0.7)
 const scratch = new Cartesian3()
@@ -110,6 +113,8 @@ export function useSatelliteLayer(
   const points = new PointPrimitiveCollection()
   const byNorad = new Map<number, number>() // NORAD number -> index into satellites and points
   const loaded = new Map<SatelliteGroup, OrbitalElements[]>()
+  const loadedAt = new Map<SatelliteGroup, number>()
+  let refreshTimer: ReturnType<typeof setInterval> | undefined
   const credit = new Credit(`Orbits: <a href="${CELESTRAK_URL}" target="_blank" rel="noopener">CelesTrak</a>`, true)
   let creditShown = false
 
@@ -160,7 +165,7 @@ export function useSatelliteLayer(
   }
 
   function tick() {
-    if (busy || !satellites.value.length || document.hidden) return
+    if (busy || !satellites.value.length || document.hidden || !live()) return
     busy = true
     ticks++
     post({ type: 'tick', version, time: Date.now(), selected: selectedIndex() })
@@ -227,6 +232,7 @@ export function useSatelliteLayer(
       wanted.map(async (g) => {
         const res = await api.satellites(g)
         loaded.set(g, res.satellites)
+        loadedAt.set(g, Date.now())
         groupCounts.value = { ...groupCounts.value, [g]: res.satellites.length }
       }),
     )
@@ -314,6 +320,19 @@ export function useSatelliteLayer(
 
   watch(groups, () => void sync(), { deep: true })
 
+  // Fresh elements for groups still switched on, so positions don't drift over a long session
+  refreshTimer = setInterval(() => {
+    let due = false
+    for (const [g, at] of loadedAt) {
+      if (groups.value[g] && Date.now() - at >= GROUP_REFRESH_MS) {
+        loaded.delete(g)
+        loadedAt.delete(g)
+        due = true
+      }
+    }
+    if (due) void sync()
+  }, REFRESH_CHECK_MS)
+
   watch(timeline.mode, () => {
     const show = live()
     orbitLine.show = show
@@ -330,6 +349,7 @@ export function useSatelliteLayer(
 
   onBeforeUnmount(() => {
     clearInterval(tickTimer)
+    clearInterval(refreshTimer)
     worker?.terminate()
   })
 

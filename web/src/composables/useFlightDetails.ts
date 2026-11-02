@@ -80,10 +80,11 @@ export function useFlightDetails(viewer: ShallowRef<Viewer | null>, flights: Ret
     }
   })
 
-  const planeNow = (fallbackHeight = 0) => {
+  /** A line to the plane, or none while it's missing from the latest report */
+  const toPlane = (from: () => Cartesian3) => () => {
     const icao = details.value?.icao24
     const p = icao ? flights.positionOf(icao) : undefined
-    return p ? Cartesian3.clone(p) : Cartesian3.fromDegrees(0, 0, fallbackHeight)
+    return p ? [from(), Cartesian3.clone(p)] : []
   }
 
   const airportAt = (a: Airport) => Cartesian3.fromDegrees(a.lon, a.lat)
@@ -117,7 +118,7 @@ export function useFlightDetails(viewer: ShallowRef<Viewer | null>, flights: Ret
       const last = Cartesian3.fromDegrees(lon, lat, alt)
       drawn.entities.add({
         polyline: {
-          positions: new CallbackProperty(() => [last, planeNow()], false),
+          positions: new CallbackProperty(toPlane(() => last), false),
           width: 3,
           arcType: ArcType.NONE,
           material: colour,
@@ -127,7 +128,7 @@ export function useFlightDetails(viewer: ShallowRef<Viewer | null>, flights: Ret
       // No track to hand: straight from the airport it left, and the card says it's approximate
       drawn.entities.add({
         polyline: {
-          positions: new CallbackProperty(() => [airportAt(route.origin), planeNow()], false),
+          positions: new CallbackProperty(toPlane(() => airportAt(route.origin)), false),
           width: 2,
           arcType: ArcType.GEODESIC,
           material: APPROXIMATE,
@@ -138,7 +139,7 @@ export function useFlightDetails(viewer: ShallowRef<Viewer | null>, flights: Ret
     if (route) {
       drawn.entities.add({
         polyline: {
-          positions: new CallbackProperty(() => [planeNow(), airportAt(route.destination)], false),
+          positions: new CallbackProperty(() => toPlane(() => airportAt(route.destination))().reverse(), false),
           width: 2,
           arcType: ArcType.GEODESIC,
           material: REMAINING,
@@ -165,6 +166,20 @@ export function useFlightDetails(viewer: ShallowRef<Viewer | null>, flights: Ret
     viewer.value?.scene.requestRender()
   }
 
+  const trackOf = (icao24: string) => api.flightTrack(icao24).then((t) => t?.points ?? null)
+
+  function fill<K extends 'aircraft' | 'route' | 'track'>(ask: number, key: K, lookup: Promise<FlightDetails[K]>) {
+    return lookup
+      .catch(() => null)
+      .then((value) => {
+        if (ask !== request || !details.value) return // another aircraft was chosen meanwhile
+        // A failed refresh keeps the track already drawn
+        if (key === 'track' && value === null && details.value.track) return
+        details.value = { ...details.value, [key]: value ?? null }
+        draw()
+      })
+  }
+
   watch(flights.selectedIcao, (icao24) => {
     const ask = ++request
     const f = icao24 ? flights.flightOf(icao24) : undefined
@@ -183,17 +198,16 @@ export function useFlightDetails(viewer: ShallowRef<Viewer | null>, flights: Ret
     }
     draw()
 
-    const fill = <K extends 'aircraft' | 'route' | 'track'>(key: K, lookup: Promise<FlightDetails[K]>) =>
-      lookup
-        .catch(() => null)
-        .then((value) => {
-          if (ask !== request || !details.value) return // another aircraft was chosen meanwhile
-          details.value = { ...details.value, [key]: value ?? null }
-          draw()
-        })
-    void fill('aircraft', aircraftInfo(icao24))
-    if (callsign) void fill('route', flightRoute(callsign))
-    if (flights.tracks.value) void fill('track', api.flightTrack(icao24).then((t) => t?.points ?? null))
+    void fill(ask, 'aircraft', aircraftInfo(icao24))
+    if (callsign) void fill(ask, 'route', flightRoute(callsign))
+    if (flights.tracks.value) void fill(ask, 'track', trackOf(icao24))
+  })
+
+  // Each new snapshot, ask again for the path flown, so it keeps up with the plane. The server keeps each
+  // aircraft's track for 5 minutes and holds to its daily allowance, so this costs no extra credits.
+  watch(flights.snapshotTime, () => {
+    const d = details.value
+    if (d && flights.tracks.value && flights.flightOf(d.icao24)) void fill(request, 'track', trackOf(d.icao24))
   })
 
   // Whether it's on its route can change as it moves (and only then are the route lines drawn)
