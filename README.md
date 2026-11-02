@@ -1,5 +1,7 @@
 # Hazard Globe
 
+https://github.com/user-attachments/assets/f0b0224c-102b-479c-9d00-36ede7c1d944
+
 [![CI](https://github.com/alijafri786/hazard-globe/actions/workflows/ci.yml/badge.svg)](https://github.com/alijafri786/hazard-globe/actions/workflows/ci.yml) [![MIT licence](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
 An open-source 3D globe of **tropical cyclones and floods** worldwide, with **alerts for the places you care about** — your home, your family abroad, a site you manage — by browser notification, email or Telegram.
