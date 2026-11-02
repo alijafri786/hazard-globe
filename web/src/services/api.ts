@@ -3,6 +3,7 @@ import type {
   EventsResponse,
   FlightsResponse,
   HazardType,
+  SatellitesResponse,
   ServerChannels,
   SubscriptionView,
   WatchArea,
@@ -40,6 +41,8 @@ export const api = {
     request<{ type: 'FeatureCollection'; features: unknown[] }>(`/api/events/${type}/${eventid}/${episodeid}/geometry`),
 
   flights: () => request<FlightsResponse>('/api/flights'),
+
+  satellites: (group: string) => request<SatellitesResponse>(`/api/satellites/${group}`),
 
   publicKey: () => request<{ publicKey: string }>('/api/push/public-key'),
 

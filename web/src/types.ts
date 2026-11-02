@@ -77,6 +77,36 @@ export interface FlightsResponse {
   flights: Flight[]
 }
 
+/**
+ * A satellite's orbit as CelesTrak publishes it (OMM mean elements, for SGP4). A type rather than an
+ * interface, so it fits satellite.js's open-ended OMM type.
+ */
+export type OrbitalElements = {
+  OBJECT_NAME: string
+  /** International designator, e.g. 1998-067A */
+  OBJECT_ID: string
+  NORAD_CAT_ID: number
+  /** ISO time the elements are for, UTC without a zone */
+  EPOCH: string
+  /** Revolutions a day */
+  MEAN_MOTION: number
+  ECCENTRICITY: number
+  INCLINATION: number
+  RA_OF_ASC_NODE: number
+  ARG_OF_PERICENTER: number
+  MEAN_ANOMALY: number
+  BSTAR: number
+  MEAN_MOTION_DOT: number
+  MEAN_MOTION_DDOT: number
+  ELEMENT_SET_NO: number
+}
+
+export interface SatellitesResponse {
+  group: string
+  fetchedAt: string
+  satellites: OrbitalElements[]
+}
+
 export const ALERT_COLOURS: Record<AlertLevel, string> = {
   Red: '#e5484d',
   Orange: '#f5a524',

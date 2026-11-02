@@ -120,3 +120,31 @@ export interface FlightsSnapshot {
   refreshSeconds: number
   flights: Flight[]
 }
+
+/** A satellite's orbit as CelesTrak publishes it (OMM, mean elements for SGP4), trimmed to what SGP4 uses */
+export interface OrbitalElements {
+  OBJECT_NAME: string
+  /** International designator, e.g. 1998-067A */
+  OBJECT_ID: string
+  NORAD_CAT_ID: number
+  /** ISO time the elements are for, UTC without a zone */
+  EPOCH: string
+  /** Revolutions a day */
+  MEAN_MOTION: number
+  ECCENTRICITY: number
+  INCLINATION: number
+  RA_OF_ASC_NODE: number
+  ARG_OF_PERICENTER: number
+  MEAN_ANOMALY: number
+  BSTAR: number
+  MEAN_MOTION_DOT: number
+  MEAN_MOTION_DDOT: number
+  ELEMENT_SET_NO: number
+}
+
+export interface SatellitesSnapshot {
+  group: string
+  /** when CelesTrak was asked */
+  fetchedAt: string
+  satellites: OrbitalElements[]
+}

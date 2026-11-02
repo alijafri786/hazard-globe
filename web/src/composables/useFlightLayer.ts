@@ -7,14 +7,13 @@ import {
   Entity,
   Math as CesiumMath,
   NearFarScalar,
-  ScreenSpaceEventType,
-  type ScreenSpaceEventHandler,
   type Viewer,
 } from 'cesium'
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } from 'vue'
 import { api } from '../services/api'
 import { escapeHtml } from '../services/html'
 import type { Flight } from '../types'
+import type { useGlobeClicks } from './useGlobeClicks'
 
 const EARTH_RADIUS_M = 6_371_000
 // Snapshots can be 15 minutes old without OpenSky credentials, so planes are moved along their last
@@ -74,7 +73,7 @@ function describe(f: Flight, snapshotTime: string): string {
     heading since then. Source: The OpenSky Network.</p>`
 }
 
-export function useFlightLayer(viewer: ShallowRef<Viewer | null>) {
+export function useFlightLayer(viewer: ShallowRef<Viewer | null>, clicks: ReturnType<typeof useGlobeClicks>) {
   const enabled = ref(false)
   const flights = shallowRef<Flight[]>([])
   const snapshotTime = ref<string | null>(null)
@@ -197,22 +196,18 @@ export function useFlightLayer(viewer: ShallowRef<Viewer | null>) {
     (v) => {
       if (!v) return
       v.scene.primitives.add(billboards)
-      // Cesium's default click only selects entities, so pick our billboards first and hand everything else on
-      const handler = v.screenSpaceEventHandler
-      const defaultClick = handler.getInputAction(ScreenSpaceEventType.LEFT_CLICK) as
-        | ((click: ScreenSpaceEventHandler.PositionedEvent) => void)
-        | undefined
-      handler.setInputAction((click: ScreenSpaceEventHandler.PositionedEvent) => {
-        const picked = v.scene.pick(click.position)
-        if (picked?.collection === billboards) select(picked.id as string)
-        else defaultClick?.(click)
-      }, ScreenSpaceEventType.LEFT_CLICK)
       v.selectedEntityChanged.addEventListener((entity?: Entity) => {
         if (entity !== selected) selected = null
       })
     },
     { immediate: true },
   )
+
+  clicks.onPick((picked) => {
+    if (picked?.collection !== billboards) return false
+    select(picked.id as string)
+    return true
+  })
 
   watch(enabled, (on) => {
     const v = viewer.value

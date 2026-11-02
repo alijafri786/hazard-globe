@@ -4,12 +4,15 @@ import AlertSetup from './components/AlertSetup.vue'
 import CameraControls from './components/CameraControls.vue'
 import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
+import SatellitePanel from './components/SatellitePanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useCloudLayer } from './composables/useCloudLayer'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
+import { useGlobeClicks } from './composables/useGlobeClicks'
 import { useHazardLayer } from './composables/useHazardLayer'
+import { useSatelliteLayer } from './composables/useSatelliteLayer'
 import { useSearchPin } from './composables/useSearchPin'
 import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
@@ -22,14 +25,16 @@ const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
-const flights = useFlightLayer(viewer)
+const clicks = useGlobeClicks(viewer)
+const flights = useFlightLayer(viewer, clicks)
+const satellites = useSatelliteLayer(viewer, timeline, clicks)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
 
 const panelOpen = ref(true)
-const tab = ref<'events' | 'weather' | 'flights' | 'alerts'>('events')
+const tab = ref<'events' | 'weather' | 'flights' | 'space' | 'alerts'>('events')
 
 const picking = computed(() => watchAreas.picking.value || temperature.picking.value)
 
@@ -67,6 +72,9 @@ watch(search.found, (place) => {
         <button role="tab" :aria-selected="tab === 'flights'" :class="{ on: tab === 'flights' }" @click="tab = 'flights'">
           Flights
         </button>
+        <button role="tab" :aria-selected="tab === 'space'" :class="{ on: tab === 'space' }" @click="tab = 'space'">
+          Space
+        </button>
         <button role="tab" :aria-selected="tab === 'alerts'" :class="{ on: tab === 'alerts' }" @click="tab = 'alerts'">
           My alerts
         </button>
@@ -83,6 +91,7 @@ watch(search.found, (place) => {
         :searched="search.found.value"
       />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
+      <SatellitePanel v-else-if="tab === 'space'" :layer="satellites" :mode="timeline.mode.value" />
       <AlertSetup v-else :watch="watchAreas" />
 
       <p class="disclaimer">
@@ -155,6 +164,8 @@ watch(search.found, (place) => {
 
 .tabs button {
   flex: none;
+  padding: 8px;
+  font-size: 14px;
   border: none;
   border-radius: 8px 8px 0 0;
   background: none;

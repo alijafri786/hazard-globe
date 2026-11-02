@@ -12,12 +12,14 @@ import { HISTORY_DAYS, isHistoryDays, type HistoryDays } from './history.js'
 import { escapeHtml, page } from './html.js'
 import type { Poller } from './poller.js'
 import { clientIp, createLimiter, rateLimit } from './ratelimit.js'
+import { isSatelliteGroup, SATELLITE_GROUPS, type SatelliteGroup } from './satellites.js'
 import type { SubscriptionStore } from './store/index.js'
 import type {
   Channel,
   EmailChannel,
   GdacsCollection,
   HazardType,
+  SatellitesSnapshot,
   Subscription,
   TelegramChannel,
   WatchArea,
@@ -29,6 +31,8 @@ export interface AppDeps {
   poller: Pick<Poller, 'latestEvents' | 'pollOnce'>
   /** Past events for the time slider (see history.ts) */
   history: (days: HistoryDays) => Promise<GdacsCollection>
+  /** Satellite orbits by CelesTrak group (see satellites.ts) */
+  satellites: (group: SatelliteGroup) => Promise<SatellitesSnapshot | null>
   deliver: Deliver
   pushEnabled: boolean
   /** Present when email is set up */
@@ -160,6 +164,16 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     const snapshot = await getFlights()
     if (!snapshot) return c.json({ error: 'Flight data unavailable, try again shortly' }, 503)
     c.header('Cache-Control', 'public, max-age=60')
+    return c.json(snapshot)
+  })
+
+  // Starlink alone is ~4 MB of JSON before compression
+  app.get('/api/satellites/:group', compress(), async (c) => {
+    const group = c.req.param('group')
+    if (!isSatelliteGroup(group)) return c.json({ error: `group must be one of ${SATELLITE_GROUPS.join(', ')}` }, 400)
+    const snapshot = await deps.satellites(group).catch(() => null)
+    if (!snapshot) return c.json({ error: 'Satellite data unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=1800')
     return c.json(snapshot)
   })
 
