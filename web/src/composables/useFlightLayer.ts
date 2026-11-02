@@ -17,11 +17,11 @@ import {
 } from 'cesium'
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } from 'vue'
 import { api } from '../services/api'
+import { project } from '../services/geo'
 import { escapeHtml } from '../services/html'
 import type { Flight } from '../types'
 import type { useGlobeClicks } from './useGlobeClicks'
 
-const EARTH_RADIUS_M = 6_371_000
 // Snapshots can be 15 minutes old without OpenSky credentials, so planes are moved along their last
 // heading between snapshots. Past this, a plane may well have turned or landed: stop guessing.
 const MAX_ESTIMATE_SECONDS = 20 * 60
@@ -45,16 +45,6 @@ const SELECTED_SCALE = 1.7
 // Callsigns show only for planes in view once zoomed in this far, and never more than this many
 const LABELS_BELOW_M = 1_500_000
 const MAX_LABELS = 300
-
-/** Great-circle destination from a start point, bearing and distance. */
-function project(lon: number, lat: number, bearingDeg: number, distanceM: number): [number, number] {
-  const d = distanceM / EARTH_RADIUS_M
-  const bearing = CesiumMath.toRadians(bearingDeg)
-  const lat1 = CesiumMath.toRadians(lat)
-  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(bearing))
-  const dLon = Math.atan2(Math.sin(bearing) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2))
-  return [CesiumMath.toDegrees(CesiumMath.negativePiToPi(CesiumMath.toRadians(lon) + dLon)), CesiumMath.toDegrees(lat2)]
-}
 
 function estimatedPosition(f: Flight, ageSeconds: number, result?: Cartesian3): Cartesian3 {
   const [, , , lon, lat, altitude, velocity, track] = f

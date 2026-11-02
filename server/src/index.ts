@@ -9,6 +9,7 @@ import { createHistory } from './history.js'
 import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { createSatellites } from './satellites.js'
+import { createShips } from './ships.js'
 import { openStore, storeKind } from './store/index.js'
 import { createTracks } from './tracks.js'
 import { createBot, createTelegramNotifier, telegramApi } from './telegram.js'
@@ -54,6 +55,8 @@ const app = createApp({
   history: createHistory(),
   satellites: createSatellites(),
   flightTrack: createTracks(),
+  // Never in end-to-end runs: they mustn't open a real stream
+  ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
   deliver,
   email,
   telegramBot,
@@ -65,6 +68,7 @@ serve({ fetch: app.fetch, port: config.port }, (info) => {
     `push ${pushEnabled ? 'on' : 'OFF — set VAPID keys'}`,
     `email ${email ? 'on' : 'off'}`,
     `telegram ${telegramBot ? `@${telegramBot}` : 'off'}`,
+    `ships ${config.aisstreamKey ? 'on' : 'off'}`,
   ]
   const mode = e2e ? 'E2E mode, no polling' : `${channels.join(', ')}, ${storeKind} store`
   console.log(`hazard-globe server on http://localhost:${info.port} (${mode})`)

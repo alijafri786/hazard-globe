@@ -14,7 +14,7 @@ Turn on the **flood forecast** overlay to see where rivers are forecast to rise 
 
 You can also switch on **live flights** to see aircraft worldwide, coloured by altitude, with their callsigns once you zoom in. Search by callsign or click a plane for its **flight details**: airline, where it's flying from and to, how far along it is and roughly how long it has left, the aircraft type and registration, and on the globe the path it has flown and the rest of its route.
 
-The **Space** tab shows **satellites** moving live: space stations, the brightest, navigation and weather satellites, Starlink, or all ~17,000 active ones, coloured by orbit. Find one by name or NORAD number, or click it, to see its height, speed and one full orbit.
+The **Sea & space** tab shows **ships** worldwide (with an AISStream key, see below), coloured by type, and **satellites** moving live: space stations, the brightest, navigation and weather satellites, Starlink, or all ~17,000 active ones, coloured by orbit. Find one by name or NORAD number, or click it, to see its height, speed and one full orbit.
 
 **Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
 
@@ -32,6 +32,8 @@ GDACS API ──(poll every 15 min)──▶ server ──▶ /api/events ──
                                      └─ sends Web Push, email or Telegram on new or escalated alerts
 
 OpenSky API ──(on demand, cached)──▶ server ──▶ /api/flights ──▶ web (flights layer)
+
+AISStream ──(WebSocket, open while in use)──▶ server ──▶ /api/ships ──▶ web (ships layer)
 
 CelesTrak ──(on demand, 2 h cache)──▶ server ──▶ /api/satellites/:group ──▶ web worker (SGP4) ──▶ satellites layer
 ```
@@ -106,6 +108,16 @@ DATABASE_URL=postgres://user:password@host:5432/dbname
 npm run store:import --workspace server   # reads DATA_FILE; or add: -- path/to/store.json
 ```
 
+### Optional: ships
+
+Create a free API key at [aisstream.io](https://aisstream.io) and add it to `server/.env`:
+
+```
+AISSTREAM_API_KEY=your-key
+```
+
+AISStream doesn't allow browsers to connect, so the server holds the one stream and hands each browser a snapshot. Without a key, the app says ships aren't set up.
+
 ### Optional: faster flight updates
 
 Flights work out of the box, but anonymous [OpenSky](https://opensky-network.org) access only allows a new snapshot every 15 minutes. With a free OpenSky account, create an API client (Account page) and add it to `server/.env` to get one every 2 minutes, and the path each selected plane has actually flown:
@@ -136,6 +148,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Search:** without a Cesium ion token, place names are looked up by OpenStreetMap's public [Nominatim](https://nominatim.org) service, straight from the browser. Its [usage policy](https://operations.osmfoundation.org/policies/nominatim/) rules out searching as you type, so it searches when you press Enter; each browser makes at most one request a second and remembers recent answers. Typed coordinates never leave the browser. For heavy use, point a deployment at its own Nominatim instance or use an ion token.
 - **Clouds:** hourly infrared images from NOAA/NESDIS's Global Mosaic of Geostationary Satellite Imagery (GMGSI), which stitches GOES, Himawari and Meteosat into one picture of the whole world, fetched from NOAA's nowCOAST map service straight from the browser. Each hour is fetched once, as one ~1 MB whole-world image, and recoloured in the browser so clear ground and sea are see-through; playing the loop makes no further requests. The images are 1 to 3 hours old, cover about 72° N to 72° S, and are shown at about 20 km detail. Hidden in History mode.
 - **Weather:** current conditions come from [Open-Meteo](https://open-meteo.com), straight from the browser, with no key. They're weather-model values for a patch a few kilometres across, not a reading from the nearest station. Each spot is asked about at most once every 10 minutes per browser, and nothing is asked until someone checks a spot. Open-Meteo's free API is for non-commercial use (under 10,000 calls a day); a commercial deployment needs one of their paid plans.
+- **Ships:** AIS positions from AISStream.io, whose data comes from volunteers' receivers on land: busy coasts and shipping lanes are well covered, the open ocean hardly at all. The server opens one WebSocket when someone first switches ships on, subscribes to the whole world, and closes it after 30 minutes with nobody looking, dropping what it collected. Positions build up over the first few minutes as ships report, and the app says so. Snapshots are rebuilt every 2 minutes; ships not heard from for 30 minutes are dropped; between snapshots, browsers move each ship along its course. A ship's destination, size and status are fetched when it's selected. Destinations are typed in by crews and often out of date. Node's WebSocket asks for compression, which AISStream needs to avoid its bandwidth limits.
 - **Satellites:** orbital elements come from [CelesTrak](https://celestrak.org) through the server, which fetches each group at most once every 2 hours however many people are looking (CelesTrak updates about that often and blocks clients that download more often), and keeps serving the last good copy if a refresh fails. Each browser then works out positions itself with SGP4 ([satellite.js](https://github.com/shashwatak/satellite-js)) in a Web Worker, once a second, good to a few kilometres. Starlink and "All active" are a few MB to download and tens of thousands of dots, so they're off until chosen. Hidden in History mode.
 - **Flight details:** the airline, route and aircraft come from [adsbdb](https://www.adsbdb.com), a free community database, looked up straight from the browser when you pick a plane. Routes are listed by callsign, which airlines reuse, so they can be out of date: if a plane is nowhere near the line between its listed airports, the card says so and draws no route. The path flown comes from OpenSky's track for that aircraft, which costs as many credits as a whole snapshot, so it's only offered with OpenSky credentials: the server works out how many tracks a day the credits left over from snapshots allow, keeps each for 5 minutes, and lets each IP ask for 30 a minute. Without one, the card shows a straight line from the departure airport and says it's a guess. "Time left" is the remaining distance at the current ground speed, so it's rough.
 - **OpenSky terms:** OpenSky data is free for research and non-commercial use. Check the terms of use on [opensky-network.org](https://opensky-network.org) before deploying commercially.
@@ -157,6 +170,6 @@ Issues and PRs welcome. Please keep the "not an official warning" disclaimer vis
 
 ## Licence
 
-MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network; aircraft and routes from adsbdb. Place search © OpenStreetMap contributors (ODbL), shown on screen with each result. Weather data by Open-Meteo.com (CC BY 4.0), credited on screen while shown. Cloud images from NOAA/NESDIS (GMGSI) via nowCOAST, US public domain. Orbital data from CelesTrak.
+MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network; aircraft and routes from adsbdb. Ship positions from AISStream.io. Place search © OpenStreetMap contributors (ODbL), shown on screen with each result. Weather data by Open-Meteo.com (CC BY 4.0), credited on screen while shown. Cloud images from NOAA/NESDIS (GMGSI) via nowCOAST, US public domain. Orbital data from CelesTrak.
 
 Flood forecasts: generated using Copernicus Emergency Management Service information, from [GloFAS](https://global-flood.emergency.copernicus.eu). They're shown under the [CEMS-FLOODS licence](https://ewds.climate.copernicus.eu/licences/cems-floods). It allows distribution and communication to the public, provided this credit is shown (the app shows it with the overlay, and on the map). The licence says the data is for information purposes only, is not a flood warning, and comes without warranty. The app shows the public layers unmodified. Before a commercial deployment, check the current terms: the licence doesn't address commercial use explicitly, and Copernicus moved some data stores to CC BY 4.0 in 2025.

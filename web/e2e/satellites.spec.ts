@@ -56,7 +56,7 @@ async function openSpace(page: Page) {
   await stubHazardData(page)
   await stubNominatim(page)
   await page.goto('/')
-  await page.getByRole('tab', { name: 'Space' }).click()
+  await page.getByRole('tab', { name: 'Sea & space' }).click()
 }
 
 const status = (page: Page) => page.locator('.meta[role="status"]')
@@ -138,7 +138,7 @@ test('satellites: hidden in history, which is about past days', async ({ page })
 
   await page.getByRole('tab', { name: 'Events' }).click()
   await page.getByRole('button', { name: 'History' }).click()
-  await page.getByRole('tab', { name: 'Space' }).click()
+  await page.getByRole('tab', { name: 'Sea & space' }).click()
   await expect(page.getByText("Satellites are shown where they are now, so they're hidden while you look at history.")).toBeVisible()
   await expect(credits(page)).not.toContainText('CelesTrak')
 

@@ -123,6 +123,42 @@ export interface FlightsSnapshot {
   flights: Flight[]
 }
 
+/**
+ * [mmsi, name, AIS ship type, lon, lat, speed over ground kn, course °, heading °, seconds since its report]
+ * Speed, course and heading are null when the ship doesn't send them.
+ */
+export type Ship = [number, string, number, number, number, number | null, number | null, number | null, number]
+
+export interface ShipsSnapshot {
+  time: string
+  refreshSeconds: number
+  /** whether the stream from AISStream is open and working */
+  receiving: boolean
+  /** when this run of collecting began: positions build up over the first minutes */
+  collectingSince: string | null
+  error: string | null
+  ships: Ship[]
+}
+
+export interface ShipDetails {
+  mmsi: number
+  name: string
+  type: number
+  lon: number
+  lat: number
+  sog: number | null
+  cog: number | null
+  heading: number | null
+  /** AIS navigational status, e.g. 0 under way, 1 at anchor, 5 moored */
+  navStatus: number | null
+  seenAt: string
+  destination: string
+  callSign: string
+  imo: number | null
+  lengthM: number | null
+  widthM: number | null
+}
+
 /** [unix seconds, lon, lat, barometric altitude m] */
 export type TrackPoint = [number, number, number, number]
 

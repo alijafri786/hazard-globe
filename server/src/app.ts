@@ -13,6 +13,7 @@ import { escapeHtml, page } from './html.js'
 import type { Poller } from './poller.js'
 import { clientIp, createLimiter, rateLimit } from './ratelimit.js'
 import { isSatelliteGroup, SATELLITE_GROUPS, type SatelliteGroup } from './satellites.js'
+import type { Ships } from './ships.js'
 import { isIcao24 } from './tracks.js'
 import type { SubscriptionStore } from './store/index.js'
 import type {
@@ -37,6 +38,8 @@ export interface AppDeps {
   satellites: (group: SatelliteGroup) => Promise<SatellitesSnapshot | null>
   /** An aircraft's path on its current flight (see tracks.ts) */
   flightTrack: (icao24: string) => Promise<FlightTrack | null>
+  /** Present when ships are set up (an AISStream key) */
+  ships?: Pick<Ships, 'snapshot' | 'details'>
   deliver: Deliver
   pushEnabled: boolean
   /** Present when email is set up */
@@ -184,6 +187,23 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
       return track ? c.json(track) : c.json({ error: 'No track available for this aircraft' }, 404)
     },
   )
+
+  const noShips = { error: "Ships aren't set up on this server" }
+
+  // Tens of thousands of ships: a few MB before compression
+  app.get('/api/ships', compress(), (c) => {
+    if (!deps.ships) return c.json(noShips, 501)
+    c.header('Cache-Control', 'public, max-age=60')
+    return c.json(deps.ships.snapshot())
+  })
+
+  app.get('/api/ships/:mmsi', (c) => {
+    if (!deps.ships) return c.json(noShips, 501)
+    const mmsi = Number(c.req.param('mmsi'))
+    if (!Number.isInteger(mmsi) || mmsi <= 0 || mmsi > 999_999_999) return c.json({ error: 'bad MMSI' }, 400)
+    const ship = deps.ships.details(mmsi)
+    return ship ? c.json(ship) : c.json({ error: 'No recent report from this ship' }, 404)
+  })
 
   // Starlink alone is ~4 MB of JSON before compression
   app.get('/api/satellites/:group', compress(), async (c) => {

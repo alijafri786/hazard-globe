@@ -5,6 +5,8 @@ import type {
   FlightTrack,
   HazardType,
   SatellitesResponse,
+  ShipDetails,
+  ShipsResponse,
   ServerChannels,
   SubscriptionView,
   WatchArea,
@@ -49,6 +51,10 @@ export const api = {
       if (err instanceof ApiError && err.status === 404) return null
       throw err
     }),
+
+  ships: () => request<ShipsResponse>('/api/ships'),
+
+  ship: (mmsi: number) => request<ShipDetails>(`/api/ships/${mmsi}`),
 
   satellites: (group: string) => request<SatellitesResponse>(`/api/satellites/${group}`),
 

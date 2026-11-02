@@ -5,6 +5,7 @@ import CameraControls from './components/CameraControls.vue'
 import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
 import SatellitePanel from './components/SatellitePanel.vue'
+import ShipPanel from './components/ShipPanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useCloudLayer } from './composables/useCloudLayer'
@@ -15,6 +16,7 @@ import { useGlobeClicks } from './composables/useGlobeClicks'
 import { useHazardLayer } from './composables/useHazardLayer'
 import { useSatelliteLayer } from './composables/useSatelliteLayer'
 import { useSearchPin } from './composables/useSearchPin'
+import { useShipLayer } from './composables/useShipLayer'
 import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
@@ -30,6 +32,7 @@ const clicks = useGlobeClicks(viewer)
 const flights = useFlightLayer(viewer, clicks)
 const flightCard = useFlightDetails(viewer, flights)
 const satellites = useSatelliteLayer(viewer, timeline, clicks)
+const ships = useShipLayer(viewer, timeline, clicks)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
@@ -82,7 +85,7 @@ watch(search.found, (place) => {
           Flights
         </button>
         <button role="tab" :aria-selected="tab === 'space'" :class="{ on: tab === 'space' }" @click="tab = 'space'">
-          Space
+          Sea &amp; space
         </button>
         <button role="tab" :aria-selected="tab === 'alerts'" :class="{ on: tab === 'alerts' }" @click="tab = 'alerts'">
           My alerts
@@ -100,7 +103,10 @@ watch(search.found, (place) => {
         :searched="search.found.value"
       />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" :card="flightCard" />
-      <SatellitePanel v-else-if="tab === 'space'" :layer="satellites" :mode="timeline.mode.value" />
+      <template v-else-if="tab === 'space'">
+        <ShipPanel :layer="ships" :mode="timeline.mode.value" />
+        <SatellitePanel :layer="satellites" :mode="timeline.mode.value" />
+      </template>
       <AlertSetup v-else :watch="watchAreas" />
 
       <p class="disclaimer">
@@ -137,7 +143,7 @@ watch(search.found, (place) => {
   position: fixed;
   top: 16px;
   left: 16px;
-  width: 360px;
+  width: 380px;
   max-height: calc(100% - 32px);
   display: flex;
   flex-direction: column;
@@ -173,7 +179,7 @@ watch(search.found, (place) => {
 
 .tabs button {
   flex: none;
-  padding: 8px;
+  padding: 8px 7px;
   font-size: 14px;
   border: none;
   border-radius: 8px 8px 0 0;
