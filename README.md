@@ -16,7 +16,7 @@ You can also switch on **live flights** to see aircraft worldwide, coloured by a
 
 **Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
 
-The **Weather** tab gives the temperature and current conditions anywhere: pick a spot on the globe, use your location, or search for a place while the tab is open.
+The **Weather** tab plays the last few hours of the world's **clouds** from satellite, and gives the **temperature** and current conditions anywhere: pick a spot on the globe, use your location, or search for a place while the tab is open.
 
 > ⚠️ **Not an official warning service.** Data comes from [GDACS](https://www.gdacs.org) and can be delayed, incomplete or wrong. Always follow your national meteorological and civil protection agencies.
 
@@ -130,6 +130,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Abuse:** API routes are rate-limited per IP in memory (subscribing 20/hour, test alerts 5 per 10 minutes per subscription, footprint lookups 60/minute, everything else 300/minute). Behind a reverse proxy, set `TRUST_PROXY` so limits see real client IPs. With several server instances, each counts separately.
 - **Flights:** the server only calls OpenSky while someone has the layer switched on, and shares one cached snapshot between all visitors, so it stays inside OpenSky's daily credit limit. Between snapshots, planes are moved along their last reported heading, so positions are approximate. Aircraft on the ground are left out.
 - **Search:** without a Cesium ion token, place names are looked up by OpenStreetMap's public [Nominatim](https://nominatim.org) service, straight from the browser. Its [usage policy](https://operations.osmfoundation.org/policies/nominatim/) rules out searching as you type, so it searches when you press Enter; each browser makes at most one request a second and remembers recent answers. Typed coordinates never leave the browser. For heavy use, point a deployment at its own Nominatim instance or use an ion token.
+- **Clouds:** hourly infrared images from NOAA/NESDIS's Global Mosaic of Geostationary Satellite Imagery (GMGSI), which stitches GOES, Himawari and Meteosat into one picture of the whole world, fetched from NOAA's nowCOAST map service straight from the browser. Each hour is fetched once, as one ~1 MB whole-world image, and recoloured in the browser so clear ground and sea are see-through; playing the loop makes no further requests. The images are 1 to 3 hours old, cover about 72° N to 72° S, and are shown at about 20 km detail. Hidden in History mode.
 - **Weather:** current conditions come from [Open-Meteo](https://open-meteo.com), straight from the browser, with no key. They're weather-model values for a patch a few kilometres across, not a reading from the nearest station. Each spot is asked about at most once every 10 minutes per browser, and nothing is asked until someone checks a spot. Open-Meteo's free API is for non-commercial use (under 10,000 calls a day); a commercial deployment needs one of their paid plans.
 - **OpenSky terms:** OpenSky data is free for research and non-commercial use. Check the terms of use on [opensky-network.org](https://opensky-network.org) before deploying commercially.
 
@@ -150,6 +151,6 @@ Issues and PRs welcome. Please keep the "not an official warning" disclaimer vis
 
 ## Licence
 
-MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network. Place search © OpenStreetMap contributors (ODbL), shown on screen with each result. Weather data by Open-Meteo.com (CC BY 4.0), credited on screen while shown.
+MIT. Event data © GDACS (European Commission JRC / UN OCHA) — see their terms of use. Flight data from The OpenSky Network. Place search © OpenStreetMap contributors (ODbL), shown on screen with each result. Weather data by Open-Meteo.com (CC BY 4.0), credited on screen while shown. Cloud images from NOAA/NESDIS (GMGSI) via nowCOAST, US public domain.
 
 Flood forecasts: generated using Copernicus Emergency Management Service information, from [GloFAS](https://global-flood.emergency.copernicus.eu). They're shown under the [CEMS-FLOODS licence](https://ewds.climate.copernicus.eu/licences/cems-floods). It allows distribution and communication to the public, provided this credit is shown (the app shows it with the overlay, and on the map). The licence says the data is for information purposes only, is not a flood warning, and comes without warranty. The app shows the public layers unmodified. Before a commercial deployment, check the current terms: the licence doesn't address commercial use explicitly, and Copernicus moved some data stores to CC BY 4.0 in 2025.

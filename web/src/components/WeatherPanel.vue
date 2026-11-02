@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { useCloudLayer } from '../composables/useCloudLayer'
 import { compassPoint, formatTemperature, formatWind, localTime, type useTemperature } from '../composables/useTemperature'
 import type { TimelineMode } from '../composables/useTimeline'
 import { formatCoordinates, type Place } from '../services/geocoders'
 import { OPEN_METEO_URL } from '../services/openMeteo'
+import CloudControls from './CloudControls.vue'
 
 const props = defineProps<{
   weather: ReturnType<typeof useTemperature>
+  clouds: ReturnType<typeof useCloudLayer>
   mode: TimelineMode
   /** The place last found with the globe's search box */
   searched: Place | null
@@ -38,12 +41,13 @@ const searchedElsewhere = computed(() => {
 
 <template>
   <section>
-    <fieldset class="probe">
-      <legend>Temperature anywhere</legend>
-      <p v-if="mode === 'history'" class="note">
-        This shows the weather now, so it's hidden while you look at history.
-      </p>
-      <template v-else>
+    <p v-if="mode === 'history'" class="note">
+      Weather shows the last few hours, so it's hidden while you look at history.
+    </p>
+    <template v-else>
+      <CloudControls :clouds="clouds" />
+      <fieldset class="probe">
+        <legend>Temperature anywhere</legend>
         <div class="actions">
           <button @click="startPicking()">Pick on globe</button>
           <button :disabled="locating" @click="locate()">{{ locating ? 'Locating…' : 'Use my location' }}</button>
@@ -91,16 +95,17 @@ const searchedElsewhere = computed(() => {
           Weather data by <a :href="OPEN_METEO_URL" target="_blank" rel="noopener">Open-Meteo.com</a>, from weather
           models rather than a nearby station, so it's for a patch of a few kilometres around the spot.
         </p>
-      </template>
-    </fieldset>
+      </fieldset>
+    </template>
   </section>
 </template>
 
 <style scoped>
 .probe {
   margin: 0;
-  padding: 0;
+  padding: 10px 0 0;
   border: none;
+  border-top: 1px solid var(--line);
 }
 
 legend {
@@ -198,18 +203,20 @@ dd {
   background: rgba(124, 92, 255, 0.18);
 }
 
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--orange);
+}
+
 .meta,
-.note,
 .error,
 .source {
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--muted);
-}
-
-.note {
-  color: var(--orange);
 }
 
 .error {

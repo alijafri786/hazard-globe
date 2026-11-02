@@ -78,7 +78,7 @@ test('temperature anywhere: pick a spot, switch units, clear, hidden in history'
   await page.getByRole('tab', { name: 'Events' }).click()
   await page.getByRole('button', { name: 'History' }).click()
   await page.getByRole('tab', { name: 'Weather' }).click()
-  await expect(page.getByText("This shows the weather now, so it's hidden while you look at history.")).toBeVisible()
+  await expect(page.getByText("Weather shows the last few hours, so it's hidden while you look at history.")).toBeVisible()
   await expect(credits(page)).not.toContainText('Open-Meteo.com')
   await page.getByRole('button', { name: 'Back to live' }).click()
   await expect(card(page).locator('.temperature')).toHaveText('54 °F')

@@ -6,6 +6,7 @@ import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
+import { useCloudLayer } from './composables/useCloudLayer'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
 import { useHazardLayer } from './composables/useHazardLayer'
@@ -20,6 +21,7 @@ const viewer = useViewer(globeEl)
 const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
+const clouds = useCloudLayer(viewer, timeline)
 const flights = useFlightLayer(viewer)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
@@ -76,6 +78,7 @@ watch(search.found, (place) => {
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"
+        :clouds="clouds"
         :mode="timeline.mode.value"
         :searched="search.found.value"
       />
