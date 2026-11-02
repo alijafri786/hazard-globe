@@ -13,10 +13,12 @@ import { escapeHtml, page } from './html.js'
 import type { Poller } from './poller.js'
 import { clientIp, createLimiter, rateLimit } from './ratelimit.js'
 import { isSatelliteGroup, SATELLITE_GROUPS, type SatelliteGroup } from './satellites.js'
+import { isIcao24 } from './tracks.js'
 import type { SubscriptionStore } from './store/index.js'
 import type {
   Channel,
   EmailChannel,
+  FlightTrack,
   GdacsCollection,
   HazardType,
   SatellitesSnapshot,
@@ -33,6 +35,8 @@ export interface AppDeps {
   history: (days: HistoryDays) => Promise<GdacsCollection>
   /** Satellite orbits by CelesTrak group (see satellites.ts) */
   satellites: (group: SatelliteGroup) => Promise<SatellitesSnapshot | null>
+  /** An aircraft's path on its current flight (see tracks.ts) */
+  flightTrack: (icao24: string) => Promise<FlightTrack | null>
   deliver: Deliver
   pushEnabled: boolean
   /** Present when email is set up */
@@ -166,6 +170,20 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     c.header('Cache-Control', 'public, max-age=60')
     return c.json(snapshot)
   })
+
+  // An aircraft not looked up lately spends OpenSky credits, so stop anyone walking through them
+  app.get(
+    '/api/flights/:icao24/track',
+    rateLimit({ windowMs: MINUTE, max: 30, key: byIp, now }),
+    compress(),
+    async (c) => {
+      const icao24 = c.req.param('icao24')
+      if (!isIcao24(icao24)) return c.json({ error: 'icao24 must be 6 lowercase hex digits' }, 400)
+      const track = await deps.flightTrack(icao24)
+      c.header('Cache-Control', 'public, max-age=120')
+      return track ? c.json(track) : c.json({ error: 'No track available for this aircraft' }, 404)
+    },
+  )
 
   // Starlink alone is ~4 MB of JSON before compression
   app.get('/api/satellites/:group', compress(), async (c) => {

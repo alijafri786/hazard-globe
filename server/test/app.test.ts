@@ -14,6 +14,17 @@ let store: SubscriptionStore
 const deliver = vi.fn<Deliver>(async () => ({ results: { push: 'sent' }, gone: [] }))
 const sendConfirmation = vi.fn(async () => undefined)
 const history = vi.fn(async (days: number) => ({ type: 'FeatureCollection' as const, features: [], days }))
+const flightTrack = vi.fn<AppDeps['flightTrack']>(async (icao24) =>
+  icao24 === 'a4c592'
+    ? {
+        icao24,
+        points: [
+          [1, -73.78, 40.62, 0],
+          [2, -73.79, 40.61, 300],
+        ],
+      }
+    : null,
+)
 const satellites = vi.fn<AppDeps['satellites']>(async (group) => ({
   group,
   fetchedAt: '2026-11-02T20:00:00.000Z',
@@ -34,7 +45,7 @@ afterEach(async () => {
 function setup(options: Partial<AppOptions> = {}, deps: Partial<AppDeps> = {}) {
   const poller = { latestEvents: () => null, pollOnce: async () => undefined }
   const app = createApp(
-    { store, poller, history, satellites, deliver, pushEnabled: true, email: { sendConfirmation }, telegramBot: 'hg_bot', ...deps },
+    { store, poller, history, satellites, flightTrack, deliver, pushEnabled: true, email: { sendConfirmation }, telegramBot: 'hg_bot', ...deps },
     { trustProxy: 1, ...options },
   )
   const call = (method: string, path: string, body?: unknown, ip = '1.1.1.1') =>
@@ -367,6 +378,26 @@ describe('GET /api/events/history', () => {
   it('answers 503 when GDACS fails', async () => {
     history.mockRejectedValueOnce(new Error('GDACS 503'))
     expect((await setup().app.request('/api/events/history?days=7')).status).toBe(503)
+  })
+})
+
+describe('GET /api/flights/:icao24/track', () => {
+  it('answers with the track, 404 without one, and 400 for anything but an icao24', async () => {
+    const { app } = setup()
+    const res = await app.request('/api/flights/a4c592/track')
+    expect(res.status).toBe(200)
+    expect((await res.json()).points).toHaveLength(2)
+    expect((await app.request('/api/flights/406540/track')).status).toBe(404)
+    for (const id of ['A4C592', 'a4c59', 'a4c5921', 'zzzzzz']) {
+      expect((await app.request(`/api/flights/${id}/track`)).status).toBe(400)
+    }
+  })
+
+  it('limits each IP to 30 lookups a minute', async () => {
+    const { app } = setup()
+    const get = () => app.request('/api/flights/406540/track', { headers: { 'X-Forwarded-For': '9.9.9.9' } })
+    for (let i = 0; i < 30; i++) expect((await get()).status).toBe(404)
+    expect((await get()).status).toBe(429)
   })
 })
 

@@ -118,7 +118,17 @@ export interface FlightsSnapshot {
   /** when OpenSky computed the positions */
   time: string
   refreshSeconds: number
+  /** whether /api/flights/:icao24/track can answer (it needs OpenSky credits to spare) */
+  tracks: boolean
   flights: Flight[]
+}
+
+/** [unix seconds, lon, lat, barometric altitude m] */
+export type TrackPoint = [number, number, number, number]
+
+export interface FlightTrack {
+  icao24: string
+  points: TrackPoint[]
 }
 
 /** A satellite's orbit as CelesTrak publishes it (OMM, mean elements for SGP4), trimmed to what SGP4 uses */

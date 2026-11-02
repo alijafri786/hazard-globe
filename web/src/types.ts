@@ -74,7 +74,17 @@ export interface FlightsResponse {
   time: string
   /** how often the server fetches a new snapshot */
   refreshSeconds: number
+  /** whether the server can give an aircraft's track (it needs OpenSky credits to spare) */
+  tracks: boolean
   flights: Flight[]
+}
+
+/** [unix seconds, lon, lat, barometric altitude m] */
+export type TrackPoint = [number, number, number, number]
+
+export interface FlightTrack {
+  icao24: string
+  points: TrackPoint[]
 }
 
 /**

@@ -10,6 +10,7 @@ import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { createSatellites } from './satellites.js'
 import { openStore, storeKind } from './store/index.js'
+import { createTracks } from './tracks.js'
 import { createBot, createTelegramNotifier, telegramApi } from './telegram.js'
 import type { PushChannel } from './types.js'
 
@@ -52,6 +53,7 @@ const app = createApp({
   poller,
   history: createHistory(),
   satellites: createSatellites(),
+  flightTrack: createTracks(),
   deliver,
   email,
   telegramBot,

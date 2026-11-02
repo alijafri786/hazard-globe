@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { useFlightDetails } from '../composables/useFlightDetails'
 import { ALTITUDE_BANDS, type useFlightLayer } from '../composables/useFlightLayer'
+import FlightDetails from './FlightDetails.vue'
 
-const props = defineProps<{ layer: ReturnType<typeof useFlightLayer> }>()
-const { enabled, count, snapshotTime, refreshSeconds, loading, error, query, matches, refresh, flyTo } = props.layer
+const props = defineProps<{ layer: ReturnType<typeof useFlightLayer>; card: ReturnType<typeof useFlightDetails> }>()
+const { enabled, count, snapshotTime, refreshSeconds, loading, error, query, matches, showCallsigns, refresh, flyTo } =
+  props.layer
 
 const updated = computed(() =>
   snapshotTime.value ? new Date(snapshotTime.value).toLocaleTimeString('en-GB', { timeStyle: 'short' }) : null,
@@ -16,12 +19,19 @@ const every = computed(() => {
 
 <template>
   <section>
+    <FlightDetails :flights="layer" :card="card" />
+
     <label class="toggle">
       <input v-model="enabled" type="checkbox" />
       Show live flights
     </label>
 
     <template v-if="enabled">
+      <label class="toggle">
+        <input v-model="showCallsigns" type="checkbox" />
+        Show callsigns when zoomed in
+      </label>
+
       <div class="legend">
         <span v-for="b in ALTITUDE_BANDS" :key="b.label"><i :style="{ background: b.colour }" />{{ b.label }}</span>
       </div>

@@ -8,6 +8,7 @@ import SatellitePanel from './components/SatellitePanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useCloudLayer } from './composables/useCloudLayer'
+import { useFlightDetails } from './composables/useFlightDetails'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
 import { useGlobeClicks } from './composables/useGlobeClicks'
@@ -27,6 +28,7 @@ const forecast = useFloodForecastLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
 const flights = useFlightLayer(viewer, clicks)
+const flightCard = useFlightDetails(viewer, flights)
 const satellites = useSatelliteLayer(viewer, timeline, clicks)
 const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
@@ -42,6 +44,13 @@ const picking = computed(() => watchAreas.picking.value || temperature.picking.v
 watch(tab, () => {
   watchAreas.stopPicking()
   temperature.stopPicking()
+})
+
+// Picking a plane shows its details in the Flights tab
+watch(flights.selectedIcao, (icao24) => {
+  if (!icao24) return
+  tab.value = 'flights'
+  panelOpen.value = true
 })
 
 // Searching from the Weather tab answers with the weather there
@@ -90,7 +99,7 @@ watch(search.found, (place) => {
         :mode="timeline.mode.value"
         :searched="search.found.value"
       />
-      <FlightPanel v-else-if="tab === 'flights'" :layer="flights" />
+      <FlightPanel v-else-if="tab === 'flights'" :layer="flights" :card="flightCard" />
       <SatellitePanel v-else-if="tab === 'space'" :layer="satellites" :mode="timeline.mode.value" />
       <AlertSetup v-else :watch="watchAreas" />
 
