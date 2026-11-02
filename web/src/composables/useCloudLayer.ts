@@ -36,7 +36,8 @@ async function availableTimes(): Promise<string[]> {
   const xml = new DOMParser().parseFromString(await res.text(), 'text/xml')
   for (const dim of xml.getElementsByTagNameNS('*', 'Dimension')) {
     if (dim.getAttribute('name') === 'time' && dim.textContent?.trim()) {
-      return dim.textContent.split(',').map((t) => new Date(t.trim()).toISOString()).sort()
+      const times = dim.textContent.split(',').map((t) => new Date(t.trim()))
+      return times.sort((a, b) => a.getTime() - b.getTime()).map((t) => t.toISOString())
     }
   }
   throw new Error('nowCOAST did not say which images it has')

@@ -69,7 +69,7 @@ self.onmessage = ({ data: msg }: MessageEvent<ToWorker>) => {
 
   const date = new Date(msg.time)
   const gmst = gstime(date)
-  const positions = new Float64Array(satrecs.length * 3).fill(NaN)
+  const positions = new Float64Array(satrecs.length * 3).fill(Number.NaN)
   for (let i = 0; i < satrecs.length; i++) {
     const rec = satrecs[i]
     const pv = rec && propagate(rec, date)
