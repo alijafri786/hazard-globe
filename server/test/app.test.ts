@@ -25,6 +25,16 @@ const flightTrack = vi.fn<AppDeps['flightTrack']>(async (icao24) =>
       }
     : null,
 )
+const windGrid = {
+  run: '2026-11-02T18:00:00.000Z',
+  validTime: '2026-11-02T21:00:00.000Z',
+  width: 2,
+  height: 1,
+  bounds: { west: 0, east: 360, south: -90, north: 90 },
+  u: [1, 2],
+  v: [3, 4],
+}
+const wind = vi.fn<AppDeps['wind']>(async () => windGrid)
 const satellites = vi.fn<AppDeps['satellites']>(async (group) => ({
   group,
   fetchedAt: '2026-11-02T20:00:00.000Z',
@@ -45,7 +55,7 @@ afterEach(async () => {
 function setup(options: Partial<AppOptions> = {}, deps: Partial<AppDeps> = {}) {
   const poller = { latestEvents: () => null, pollOnce: async () => undefined }
   const app = createApp(
-    { store, poller, history, satellites, flightTrack, deliver, pushEnabled: true, email: { sendConfirmation }, telegramBot: 'hg_bot', ...deps },
+    { store, poller, history, satellites, flightTrack, wind, deliver, pushEnabled: true, email: { sendConfirmation }, telegramBot: 'hg_bot', ...deps },
     { trustProxy: 1, ...options },
   )
   const call = (method: string, path: string, body?: unknown, ip = '1.1.1.1') =>
@@ -398,6 +408,15 @@ describe('GET /api/flights/:icao24/track', () => {
     const get = () => app.request('/api/flights/406540/track', { headers: { 'X-Forwarded-For': '9.9.9.9' } })
     for (let i = 0; i < 30; i++) expect((await get()).status).toBe(404)
     expect((await get()).status).toBe(429)
+  })
+})
+
+describe('GET /api/weather/wind', () => {
+  it('serves the latest grid, or 503 when NOAA has never answered', async () => {
+    const { app } = setup()
+    expect(await (await app.request('/api/weather/wind')).json()).toEqual(windGrid)
+    wind.mockResolvedValueOnce(null)
+    expect((await app.request('/api/weather/wind')).status).toBe(503)
   })
 })
 

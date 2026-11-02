@@ -21,6 +21,7 @@ import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
+import { useWindLayer } from './composables/useWindLayer'
 
 const globeEl = ref<HTMLElement | null>(null)
 const viewer = useViewer(globeEl)
@@ -28,6 +29,7 @@ const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
+const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
 const flights = useFlightLayer(viewer, clicks)
 const flightCard = useFlightDetails(viewer, flights)
@@ -99,6 +101,7 @@ watch(search.found, (place) => {
         v-else-if="tab === 'weather'"
         :weather="temperature"
         :clouds="clouds"
+        :wind="wind"
         :mode="timeline.mode.value"
         :searched="search.found.value"
       />

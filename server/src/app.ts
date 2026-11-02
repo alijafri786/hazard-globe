@@ -26,6 +26,7 @@ import type {
   Subscription,
   TelegramChannel,
   WatchArea,
+  WindGrid,
 } from './types.js'
 import { mergeChannels, newToken, parseAreas, parsePushChannel } from './validate.js'
 
@@ -38,6 +39,8 @@ export interface AppDeps {
   satellites: (group: SatelliteGroup) => Promise<SatellitesSnapshot | null>
   /** An aircraft's path on its current flight (see tracks.ts) */
   flightTrack: (icao24: string) => Promise<FlightTrack | null>
+  /** Wind for the animation (see weather/wind.ts) */
+  wind: () => Promise<WindGrid | null>
   /** Present when ships are set up (an AISStream key) */
   ships?: Pick<Ships, 'snapshot' | 'details'>
   deliver: Deliver
@@ -187,6 +190,14 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
       return track ? c.json(track) : c.json({ error: 'No track available for this aircraft' }, 404)
     },
   )
+
+  // Two 1° grids: ~650 KB of JSON before compression
+  app.get('/api/weather/wind', compress(), async (c) => {
+    const grid = await deps.wind().catch(() => null)
+    if (!grid) return c.json({ error: 'Wind data unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=900')
+    return c.json(grid)
+  })
 
   const noShips = { error: "Ships aren't set up on this server" }
 

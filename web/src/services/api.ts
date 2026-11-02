@@ -7,6 +7,7 @@ import type {
   SatellitesResponse,
   ShipDetails,
   ShipsResponse,
+  WindGrid,
   ServerChannels,
   SubscriptionView,
   WatchArea,
@@ -53,6 +54,8 @@ export const api = {
     }),
 
   ships: () => request<ShipsResponse>('/api/ships'),
+
+  wind: () => request<WindGrid>('/api/weather/wind'),
 
   ship: (mmsi: number) => request<ShipDetails>(`/api/ships/${mmsi}`),
 

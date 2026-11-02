@@ -12,6 +12,7 @@ import { createSatellites } from './satellites.js'
 import { createShips } from './ships.js'
 import { openStore, storeKind } from './store/index.js'
 import { createTracks } from './tracks.js'
+import { createWind } from './weather/wind.js'
 import { createBot, createTelegramNotifier, telegramApi } from './telegram.js'
 import type { PushChannel } from './types.js'
 
@@ -55,6 +56,7 @@ const app = createApp({
   history: createHistory(),
   satellites: createSatellites(),
   flightTrack: createTracks(),
+  wind: createWind(),
   // Never in end-to-end runs: they mustn't open a real stream
   ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
   deliver,

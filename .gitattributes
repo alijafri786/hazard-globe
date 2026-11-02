@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# Test fixtures: GRIB2 weather files
+*.grb2 binary
