@@ -52,7 +52,7 @@ export function matchGdacs(q: Quake, events: readonly HazardEvent[]): HazardEven
   return events.find((e) => {
     if (e.properties.eventtype !== 'EQ' || e.geometry?.type !== 'Point') return false
     const [lon, lat] = e.geometry.coordinates as number[]
-    const at = e.properties.fromdate ? utc(e.properties.fromdate) : NaN
+    const at = e.properties.fromdate ? utc(e.properties.fromdate) : Number.NaN
     return Math.abs(at - q.time) <= 2 * 60_000 && km(q, { lon, lat }) <= 50
   })
 }

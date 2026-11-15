@@ -78,6 +78,9 @@ export function parseViewState(hash: string): ViewState {
   return state
 }
 
+/** One fixed order for ids in a link, whoever's browser makes it, so the same view gives the same link */
+const byId = (a: string, b: string) => a.localeCompare(b, 'en')
+
 /** The fragment for a view, in a fixed order, so the same view always gives the same link */
 export function formatViewState(s: ViewState): string {
   const q = new URLSearchParams()
@@ -88,12 +91,12 @@ export function formatViewState(s: ViewState): string {
     q.set('cam', [lon.toFixed(4), lat.toFixed(4), Math.round(height), h.toFixed(1), pitch.toFixed(1)].join(','))
     if (mode !== '3d') q.set('mode', mode)
   }
-  if (s.layers) q.set('layers', [...s.layers].sort().join(','))
+  if (s.layers) q.set('layers', [...s.layers].sort(byId).join(','))
   if (s.event) q.set('event', s.event)
   if (s.tab) q.set('tab', s.tab)
   if (s.history) q.set('history', `${s.history.days}:${s.history.day}`)
   if (s.quakes) q.set('quakes', s.quakes)
-  if (s.sats) q.set('sats', [...s.sats].sort().join(','))
+  if (s.sats) q.set('sats', [...s.sats].sort(byId).join(','))
   // commas are safe in a fragment and much easier to read than %2C
   return q.toString().replaceAll('%2C', ',').replaceAll('%3A', ':')
 }
