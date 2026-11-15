@@ -106,11 +106,12 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
             image: hazardSymbol(p.eventtype, ALERT_COLOURS[p.alertlevel] ?? '#888', 32),
             width: size,
             height: size,
-            heightReference: HeightReference.CLAMP_TO_GROUND,
+            // On the ground (height 0 above the terrain), but not CLAMP_TO_GROUND: with world terrain on
+            // a real GPU, Cesium's clamped billboards are drawn through the Earth, so markers on the far
+            // side showed on the near one (SwiftShader, as in the tests, doesn't show it). Relative
+            // heights are depth-tested like any billboard. No disableDepthTestDistance, for the same reason.
+            heightReference: HeightReference.RELATIVE_TO_GROUND,
             scaleByDistance: new NearFarScalar(1e6, 1.4, 2e7, 0.8),
-            // No disableDepthTestDistance: it would draw markers through the Earth from the far side.
-            // With the globe's default depthTestAgainstTerrain = false, Cesium still hides anything
-            // behind the globe but draws ground-clamped markers over hills instead of half-burying them.
           },
           label: {
             text: p.name || '',
