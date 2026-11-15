@@ -29,7 +29,7 @@ const gradient = (id: GibsId) => `linear-gradient(to right, ${GIBS[id].legend.co
 
 <template>
   <fieldset class="gibs">
-    <legend>{{ tab === 'weather' ? 'Rainfall' : 'The sea' }}</legend>
+    <legend>{{ tab === 'weather' ? 'From satellites' : 'The sea' }}</legend>
     <label v-for="id in others" :key="id" class="toggle">
       <input v-model="on[id]" type="checkbox" />
       {{ GIBS[id].label }}

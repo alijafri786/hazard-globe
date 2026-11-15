@@ -7,6 +7,7 @@ import { compassPoint, formatTemperature, formatWind, localTime, type useTempera
 import type { TimelineMode } from '../composables/useTimeline'
 import { formatCoordinates, type Place } from '../services/geocoders'
 import { OPEN_METEO_URL } from '../services/openMeteo'
+import AirQualityReading from './AirQualityReading.vue'
 import CloudControls from './CloudControls.vue'
 import GibsControls from './GibsControls.vue'
 import WindControls from './WindControls.vue'
@@ -20,7 +21,7 @@ const props = defineProps<{
   /** The place last found with the globe's search box */
   searched: Place | null
 }>()
-const { unit, spot, reading, loading, error, check, clear, startPicking, checkMyLocation } = props.weather
+const { unit, spot, reading, air, loading, error, check, clear, startPicking, checkMyLocation } = props.weather
 
 const locating = ref(false)
 const locateError = ref<string | null>(null)
@@ -92,6 +93,7 @@ const searchedElsewhere = computed(() => {
               <dt>Local time</dt>
               <dd>{{ localTime(reading) }} {{ reading.timezoneAbbreviation }}</dd>
             </dl>
+            <AirQualityReading v-if="air && spot" :air="air" :lon="spot.lon" />
           </template>
         </div>
         <p v-else class="meta">Pick a spot on the globe, use your location, or search for a place.</p>
@@ -101,8 +103,9 @@ const searchedElsewhere = computed(() => {
           <button :aria-pressed="unit === 'F'" :class="{ on: unit === 'F' }" @click="unit = 'F'">°F, mph</button>
         </div>
         <p class="source">
-          Weather data by <a :href="OPEN_METEO_URL" target="_blank" rel="noopener">Open-Meteo.com</a>, from weather
-          models rather than a nearby station, so it's for a patch of a few kilometres around the spot.
+          Weather and air quality by <a :href="OPEN_METEO_URL" target="_blank" rel="noopener">Open-Meteo.com</a>, from
+          models (air quality from Copernicus CAMS) rather than a nearby station, so it's for a patch a few kilometres
+          or more around the spot.
         </p>
       </fieldset>
     </template>

@@ -15,7 +15,7 @@ import {
 } from 'cesium'
 import { onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } from 'vue'
 import { escapeHtml } from '../services/html'
-import { currentConditions, OPEN_METEO_URL, type Conditions } from '../services/openMeteo'
+import { airQuality, currentConditions, OPEN_METEO_URL, type AirQuality, type Conditions } from '../services/openMeteo'
 import type { useTimeline } from './useTimeline'
 
 const UNIT_KEY = 'hazard-globe:temperature-unit'
@@ -56,6 +56,8 @@ export function useTemperature(viewer: ShallowRef<Viewer | null>, timeline: Retu
   const unit = ref<TemperatureUnit>(readUnit())
   const spot = shallowRef<Spot | null>(null)
   const reading = shallowRef<Conditions | null>(null)
+  /** Air quality at the same spot; null until known, or when Open-Meteo couldn't say */
+  const air = shallowRef<AirQuality | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const picking = ref(false)
@@ -119,10 +121,15 @@ export function useTemperature(viewer: ShallowRef<Viewer | null>, timeline: Retu
     stopPicking()
     spot.value = { lon, lat, name }
     reading.value = null
+    air.value = null
     const request = ++latestRequest
     loading.value = true
     error.value = null
     draw()
+    // Asked alongside the weather; a failure leaves the weather alone
+    void airQuality(lon, lat)
+      .then((a) => request === latestRequest && (air.value = a))
+      .catch(() => undefined)
     try {
       const conditions = await currentConditions(lon, lat)
       if (request !== latestRequest) return // asked about somewhere else meanwhile
@@ -141,6 +148,7 @@ export function useTemperature(viewer: ShallowRef<Viewer | null>, timeline: Retu
     latestRequest++
     spot.value = null
     reading.value = null
+    air.value = null
     loading.value = false
     error.value = null
     draw()
@@ -201,5 +209,5 @@ export function useTemperature(viewer: ShallowRef<Viewer | null>, timeline: Retu
 
   onBeforeUnmount(stopPicking)
 
-  return { unit, spot, reading, loading, error, picking, check, clear, startPicking, stopPicking, checkMyLocation }
+  return { unit, spot, reading, air, loading, error, picking, check, clear, startPicking, stopPicking, checkMyLocation }
 }

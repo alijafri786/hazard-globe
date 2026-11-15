@@ -3,7 +3,7 @@
  * is one switch in the layer list; colours and values for the key are sampled from GIBS's own colour maps
  * (gibs.earthdata.nasa.gov/colormaps/v1.3/), so the key matches the tiles without fetching anything.
  */
-export const GIBS_IDS = ['rain', 'sst', 'sstAnomaly', 'seaIce'] as const
+export const GIBS_IDS = ['rain', 'aod', 'sst', 'sstAnomaly', 'seaIce'] as const
 export type GibsId = (typeof GIBS_IDS)[number]
 
 export interface GibsLayerInfo {
@@ -35,6 +35,21 @@ export const GIBS: Record<GibsId, GibsLayerInfo> = {
       ends: ['0.1', '1.5', '9', '50+'],
     },
     about: 'Rain and snow from satellites, averaged over a day, about 10 km across.',
+  },
+  aod: {
+    label: 'Smoke, dust and haze',
+    tab: 'weather',
+    sea: false,
+    layer: 'MODIS_Combined_Value_Added_AOD',
+    tileMatrixSet: 'GoogleMapsCompatible_Level6',
+    maximumLevel: 6,
+    legend: {
+      title: 'Haze (aerosol optical depth)',
+      colours: ['#fffdcd', '#ffe373', '#ffc144', '#ff8c25', '#ff5217', '#eb1a0c', '#c0010d', '#7d000e'],
+      ends: ['0', '0.3', '0.6+'],
+    },
+    about:
+      'How much smoke, dust and pollution dims the sunlight through the whole sky, from MODIS: not the air at ground level, which the point check gives.',
   },
   sst: {
     label: 'Sea temperature',
