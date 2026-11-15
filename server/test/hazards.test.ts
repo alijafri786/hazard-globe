@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { planAlerts } from '../src/alerts.js'
 import { splitGeometry } from '../src/forecast.js'
 import { HAZARD_TYPES, HAZARDS, isHazardType } from '../src/hazards.js'
@@ -29,9 +29,16 @@ describe('affected areas', () => {
     expect(contours.every((g) => g.type === 'MultiPolygon')).toBe(true)
   })
 
-  it('falls back to the 100 km circle when there is no strong-shaking contour', () => {
-    expect(affected(earthquakeCollection({ contours: [4, 5] }), 'EQ')).toEqual([square(0, 0, 0.9)])
+  it('falls back to the 100 km circle only while there is no ShakeMap', () => {
     expect(affected(earthquakeCollection({ contours: [] }), 'EQ')).toEqual([square(0, 0, 0.9)])
+  })
+
+  it('takes a ShakeMap with no strong shaking to mean nowhere was hit, not "unknown"', () => {
+    expect(splitGeometry(earthquakeCollection({ contours: [4, 5, 5.5] }), 'EQ')).toEqual({
+      affected: [],
+      reachesNowhere: true,
+      forecast: null,
+    })
   })
 
   it.each<[HazardType, string]>([
@@ -48,6 +55,31 @@ describe('affected areas', () => {
 
   it('has nothing but the event point to go on for a type with no polygon', () => {
     expect(affected({ type: 'FeatureCollection', features: [] }, 'WF')).toEqual([])
+  })
+})
+
+describe('trimming before caching', () => {
+  it('keeps an earthquake’s weak contours as features without their shapes, and the rest whole', () => {
+    const full = earthquakeCollection({ contours: [4, 5, 6, 7] })
+    const trimmed = HAZARDS.EQ.trim!(full.features)
+    expect(trimmed).toHaveLength(full.features.length)
+    const shapes = trimmed.map((f) => [f.properties?.Class, f.geometry?.type ?? null])
+    expect(shapes).toEqual([
+      ['Point_Centroid', 'Point'],
+      ['Poly_Circle', 'Polygon'],
+      ['Poly_SMPInt_4', null],
+      ['Poly_SMPInt_5', null],
+      ['Poly_SMPInt_6', 'MultiPolygon'],
+      ['Poly_SMPInt_7', 'MultiPolygon'],
+    ])
+  })
+
+  it('decides the same footprint from a trimmed collection as from the whole one', () => {
+    for (const contours of [[4, 5, 6, 7], [4, 5], []]) {
+      const full = earthquakeCollection({ contours })
+      const trimmed = { ...full, features: HAZARDS.EQ.trim!(full.features) } as GdacsCollection
+      expect(splitGeometry(trimmed, 'EQ')).toEqual(splitGeometry(full, 'EQ'))
+    }
   })
 })
 
@@ -69,6 +101,23 @@ describe('alerts for the newer hazard types', () => {
     expect(alert.payload.body).toBe(
       'Earthquake in Atlantis — Atlantis\nMagnitude 7M, Depth:18km\nNear: Home\n' + HAZARDS.EQ.note,
     )
+  })
+
+  it('does not alert anyone, even at the epicentre, when the ShakeMap shows no strong shaking', async () => {
+    const weak = earthquakeCollection({ contours: [4, 4.5, 5] })
+    expect(await planAlerts([quake], [areaAt(0)], lookup(weak))).toEqual([])
+  })
+
+  it('does not fetch the footprint of an earthquake too far away to reach any area', async () => {
+    const lookupFn = vi.fn(lookup(earthquakeCollection()))
+    // 20° of longitude at the equator: ~2,200 km, past an earthquake's 1,000 km reach
+    expect(await planAlerts([quake], [areaAt(20)], lookupFn)).toEqual([])
+    expect(lookupFn).not.toHaveBeenCalled()
+    // the same distance still counts for types whose footprint can run that far
+    const drought = makeEvent({ eventtype: 'DR', eventid: 8 })
+    const far = makeSub({ area: { lon: 20, lat: 0, radiusKm: 5, hazards: ['DR'] } })
+    const droughtLookup = vi.fn(async () => splitGeometry(areaCollection(square(10, 0, 11)), 'DR'))
+    expect(await planAlerts([drought], [far], droughtLookup)).toHaveLength(1)
   })
 
   it('does not alert an area that only felt weak shaking', async () => {

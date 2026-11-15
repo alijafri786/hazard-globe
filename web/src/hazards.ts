@@ -77,10 +77,12 @@ export function affectedFeatures(features: GeoFeature[], type: HazardType): GeoF
     case 'FL':
       return withGeometry
     case 'EQ': {
-      const shaking = withGeometry.filter(
-        (f) => /^Poly_SMPInt_\d+$/.test(cls(f)) && Number(f.properties?.intensity) >= EQ_MIN_INTENSITY,
-      )
-      return (shaking.length ? shaking : withGeometry.filter((f) => cls(f) === 'Poly_Circle')).filter(isPolygon)
+      // Weak contours come without their shapes (the server trims them), but they still say a ShakeMap exists
+      const contours = features.filter((f) => /^Poly_SMPInt_\d+$/.test(cls(f)))
+      // No ShakeMap yet: GDACS's 100 km circle round the epicentre stands in for it
+      if (!contours.length) return withGeometry.filter((f) => cls(f) === 'Poly_Circle' && isPolygon(f))
+      // One with no strong shaking anywhere: nothing to shade
+      return contours.filter((f) => Number(f.properties?.intensity) >= EQ_MIN_INTENSITY && isPolygon(f))
     }
     default:
       return withGeometry.filter(isPolygon)

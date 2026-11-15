@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fetchEvents, fetchGeometryCollection } from '../src/gdacs.js'
-import { makeEvent, square } from './fixtures.js'
+import { earthquakeCollection, makeEvent, square } from './fixtures.js'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 const collection = (...features: unknown[]) => ({ type: 'FeatureCollection', features })
@@ -122,6 +122,17 @@ const geometries = async (...args: Parameters<typeof fetchGeometryCollection>) =
   ((await fetchGeometryCollection(...args))?.features ?? []).map((f) => f.geometry)
 
 describe('fetchGeometryCollection', () => {
+  it('trims an earthquake’s weak contours before caching and serving it', async () => {
+    mockFetch(() => json(earthquakeCollection({ contours: [4, 6] })))
+    const features = (await fetchGeometryCollection('EQ', 601, 1))?.features ?? []
+    expect(features.map((f) => [f.properties?.Class, f.geometry?.type ?? null])).toEqual([
+      ['Point_Centroid', 'Point'],
+      ['Poly_Circle', 'Polygon'],
+      ['Poly_SMPInt_4', null],
+      ['Poly_SMPInt_6', 'MultiPolygon'],
+    ])
+  })
+
   it('returns the geometries and caches them per episode', async () => {
     const fetch = mockFetch(() => json(collection({ type: 'Feature', properties: {}, geometry: square(0, 0, 1) })))
     expect(await geometries('TC', 501, 1)).toEqual([square(0, 0, 1)])
