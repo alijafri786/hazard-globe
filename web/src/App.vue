@@ -10,6 +10,7 @@ import SatellitePanel from './components/SatellitePanel.vue'
 import ShipPanel from './components/ShipPanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
+import { useClimatologyLayer } from './composables/useClimatologyLayer'
 import { useCloudLayer } from './composables/useCloudLayer'
 import { useEarthquakeLayer } from './composables/useEarthquakeLayer'
 import { useFlightDetails } from './composables/useFlightDetails'
@@ -34,6 +35,7 @@ const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
 const quakes = useEarthquakeLayer(viewer, timeline, hazards.all)
+const climatology = useClimatologyLayer(viewer)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -45,7 +47,7 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
-const layers = createLayerRegistry({ hazards, forecast, quakes, clouds, wind, flights, ships, satellites, timeline })
+const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, clouds, wind, flights, ships, satellites, timeline })
 const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
@@ -57,6 +59,7 @@ const url = useUrlState({
   tab,
   loaded: computed(() => [hazards.all.value, quakes.quakes.value]),
   quakeFeed: quakes.feed,
+  climatology: { stormClass: climatology.stormClass, month: climatology.month },
   satelliteGroups: satellites.groups,
 })
 
@@ -161,7 +164,7 @@ watch(search.found, (place) => {
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" />
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"

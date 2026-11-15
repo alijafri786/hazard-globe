@@ -6,6 +6,7 @@ import { api } from '../services/api'
 import { pushSupport } from '../services/push'
 import { MAX_AREAS, type WatchArea } from '../types'
 import AreaEditor from './AreaEditor.vue'
+import AreaStormHistory from './AreaStormHistory.vue'
 import ChannelSettings from './ChannelSettings.vue'
 
 const props = defineProps<{ watch: ReturnType<typeof useWatchAreas> }>()
@@ -91,6 +92,7 @@ const remove = (i: number) =>
           <button class="area-main" @click="watch.flyTo(a)">
             <strong>{{ a.label }}</strong>
             <small>{{ summary(a) }}</small>
+            <AreaStormHistory v-if="a.hazards.includes('TC')" :lon="a.lon" :lat="a.lat" :radius-km="a.radiusKm" />
           </button>
           <button class="link" :disabled="busy || !!draft" @click="startEdit(i)">Edit</button>
           <button

@@ -201,3 +201,33 @@ export interface QuakesResponse {
   generatedAt: string | null
   quakes: Quake[]
 }
+
+export type StormClass = 'all' | 'hurricane' | 'major'
+
+/** What the server built its storm climatology from (see server/src/climatology/) */
+export interface ClimatologyInfo {
+  source: string
+  citation: string
+  from: string
+  to: string
+  years: number
+  storms: number
+  reachKm: number
+  classes: Record<StormClass, number>
+  built: string
+  /** whole year, then by month */
+  grids: { res: number; cols: number; rows: number }[]
+}
+
+/** How often storms passed near a place */
+export interface PlaceClimatology {
+  from: string
+  to: string
+  years: number
+  radiusKm: number
+  storms: number
+  hurricane: number
+  major: number
+  peakMonths: number[]
+  strongest: { name: string; year: number; kt: number } | null
+}
