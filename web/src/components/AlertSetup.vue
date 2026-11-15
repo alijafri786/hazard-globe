@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { useWatchAreas } from '../composables/useWatchAreas'
+import { hazardList } from '../hazards'
 import { api } from '../services/api'
 import { pushSupport } from '../services/push'
 import { MAX_AREAS, type WatchArea } from '../types'
@@ -29,7 +30,7 @@ async function run(task: () => Promise<string>) {
 }
 
 function summary(a: WatchArea): string {
-  const hazards = a.hazards.length === 2 ? 'Storms and floods' : a.hazards[0] === 'TC' ? 'Storms' : 'Floods'
+  const hazards = hazardList(a.hazards)
   const level = { Green: 'all levels', Orange: 'orange and red', Red: 'red only' }[a.minAlert]
   const cone = a.forecastAlerts && a.hazards.includes('TC') ? ' · forecast cones too' : ''
   return `${a.radiusKm} km · ${hazards}, ${level}${cone}`

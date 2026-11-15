@@ -119,3 +119,42 @@ export function cycloneCollection({
     ],
   }
 }
+
+const gdacsFeature = (geometry: Geometry, props: Record<string, unknown>) =>
+  ({ type: 'Feature', geometry, properties: props }) as unknown as GdacsCollection['features'][number]
+
+/**
+ * A GDACS earthquake geometry collection, shaped like a real one (event 1573141, Oct 2026): the epicentre,
+ * a 100 km circle, and ShakeMap contours whose `intensity` steps by 0.5 and whose Class rounds it up.
+ */
+export function earthquakeCollection({
+  at = [0, 0] as [number, number],
+  contours = [4, 5, 6, 7] as number[],
+} = {}): GdacsCollection {
+  const [lon, lat] = at
+  return {
+    type: 'FeatureCollection',
+    features: [
+      gdacsFeature({ type: 'Point', coordinates: at }, { Class: 'Point_Centroid', polygonlabel: 'Centroid' }),
+      gdacsFeature(square(lon, lat, 0.9), { Class: 'Poly_Circle', polygonlabel: '100km' }),
+      // weaker shaking reaches further: intensity 4 covers the most ground
+      ...contours.map((i) =>
+        gdacsFeature(
+          { type: 'MultiPolygon', coordinates: [square(lon, lat, 10 / i).coordinates] },
+          { Class: `Poly_SMPInt_${Math.ceil(i)}`, polygonlabel: `Intensity ${i}`, intensity: i },
+        ),
+      ),
+    ],
+  }
+}
+
+/** The centroid-plus-one-polygon shape GDACS gives volcanoes (Poly_Circle), wildfires and droughts (Poly_area). */
+export function areaCollection(area: Geometry, Class = 'Poly_area', at: [number, number] = [0, 0]): GdacsCollection {
+  return {
+    type: 'FeatureCollection',
+    features: [
+      gdacsFeature({ type: 'Point', coordinates: at }, { Class: 'Point_Centroid', polygonlabel: 'Centroid' }),
+      gdacsFeature(area, { Class, polygonlabel: 'Affected Area' }),
+    ],
+  }
+}

@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import { DEFAULT_HAZARDS, HAZARD_TYPES } from './hazards.js'
 import {
   ALERT_RANK,
   MAX_AREAS,
@@ -17,9 +18,10 @@ const isNumIn = (v: unknown, min: number, max: number): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max
 
+/** Known types only, in the usual order; none chosen (or none known) means the defaults. */
 function parseHazards(v: unknown): HazardType[] {
-  const hazards = Array.isArray(v) ? (['TC', 'FL'] as const).filter((h) => v.includes(h)) : []
-  return hazards.length ? hazards : ['TC', 'FL']
+  const hazards = Array.isArray(v) ? HAZARD_TYPES.filter((h) => v.includes(h)) : []
+  return hazards.length ? hazards : [...DEFAULT_HAZARDS]
 }
 
 const parseLevel = (v: unknown): AlertLevel =>

@@ -12,7 +12,8 @@ describe('createHistory', () => {
 
     const [a, b] = await Promise.all([history(30), history(30)])
     expect(a).toBe(b)
-    expect(fetch).toHaveBeenCalledExactlyOnceWith({ days: 30 })
+    // pages further than the live feed, and leaves out the Green types GDACS lists thousands of
+    expect(fetch).toHaveBeenCalledExactlyOnceWith({ days: 30, maxPages: 20, skipManyGreen: true })
 
     await history(7)
     t += 14 * 60_000

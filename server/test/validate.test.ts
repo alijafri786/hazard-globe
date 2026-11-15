@@ -33,11 +33,21 @@ describe('parseAreas', () => {
   })
 
   it('cleans hazards, level and label', () => {
-    const [area] = parseAreas([input({ hazards: ['FL', 'EQ', 'FL'], minAlert: 'Purple', label: '  x'.padEnd(200, 'y') })])!
-    expect(area.hazards).toEqual(['FL'])
+    const [area] = parseAreas([input({ hazards: ['EQ', 'FL', 'XX', 'FL'], minAlert: 'Purple', label: '  x'.padEnd(200, 'y') })])!
+    expect(area.hazards).toEqual(['FL', 'EQ'])
     expect(area.minAlert).toBe('Orange')
     expect(area.label).toHaveLength(80)
     expect(area.label.startsWith('x')).toBe(true)
+  })
+
+  it('falls back to storms and floods when no known hazard is chosen', () => {
+    expect(parseAreas([input({ hazards: ['XX'] })])![0].hazards).toEqual(['TC', 'FL'])
+    expect(parseAreas([input({ hazards: [] })])![0].hazards).toEqual(['TC', 'FL'])
+  })
+
+  it('accepts every GDACS hazard type', () => {
+    const all = ['DR', 'WF', 'VO', 'EQ', 'FL', 'TC']
+    expect(parseAreas([input({ hazards: all })])![0].hazards).toEqual(['TC', 'FL', 'EQ', 'VO', 'WF', 'DR'])
   })
 
   it('uses top-level hazards and level as defaults (the v1 request shape)', () => {

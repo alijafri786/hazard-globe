@@ -8,6 +8,7 @@ import { anySent, type Deliver } from './delivery.js'
 import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
 import { fetchGeometryCollection } from './gdacs.js'
+import { isHazardType } from './hazards.js'
 import { HISTORY_DAYS, isHistoryDays, type HistoryDays } from './history.js'
 import { escapeHtml, page } from './html.js'
 import type { Poller } from './poller.js'
@@ -21,7 +22,6 @@ import type {
   EmailChannel,
   FlightTrack,
   GdacsCollection,
-  HazardType,
   SatellitesSnapshot,
   Subscription,
   TelegramChannel,
@@ -153,13 +153,15 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     return c.json({ fetchedAt: new Date(now()).toISOString(), days, ...data })
   })
 
-  // Uncached ids reach GDACS, so stop anyone walking through ids at our expense
+  // Uncached ids reach GDACS, so stop anyone walking through ids at our expense.
+  // An earthquake's ShakeMap contours are ~600 KB of JSON, hence compressed.
   app.get(
     '/api/events/:type/:eventid/:episodeid/geometry',
     rateLimit({ windowMs: MINUTE, max: 60, key: byIp, now }),
+    compress(),
     async (c) => {
-      const type = c.req.param('type') as HazardType
-      if (type !== 'TC' && type !== 'FL') return c.json({ error: 'unsupported hazard type' }, 400)
+      const type = c.req.param('type')
+      if (!isHazardType(type)) return c.json({ error: 'unsupported hazard type' }, 400)
       const eventid = Number(c.req.param('eventid'))
       const episodeid = Number(c.req.param('episodeid'))
       if (!Number.isInteger(eventid) || !Number.isInteger(episodeid)) return c.json({ error: 'bad id' }, 400)

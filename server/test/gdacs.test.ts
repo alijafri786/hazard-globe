@@ -30,22 +30,57 @@ describe('fetchEvents', () => {
     expect(features[0].properties).toMatchObject({ eventid: 1, episodeid: 5, alertlevel: 'Orange' })
   })
 
-  it('asks for the last `days` days, defaulting to LOOKBACK_DAYS', async () => {
+  it('asks for the last `days` days, defaulting to LOOKBACK_DAYS, and droughts for at least 40', async () => {
     vi.useFakeTimers({ now: new Date('2026-06-30T15:00:00Z') })
     const fetch = mockFetch(() => json(collection()))
-    const ranges = () => new Set(fetch.mock.calls.map(([u]) => `${new URL(String(u)).searchParams.get('fromdate')}..${new URL(String(u)).searchParams.get('todate')}`))
+    const ranges = () =>
+      new Set(
+        fetch.mock.calls.map(([u]) => {
+          const q = new URL(String(u)).searchParams
+          return `${q.get('eventlist')} ${q.get('fromdate')}..${q.get('todate')}`
+        }),
+      )
 
     await fetchEvents({ days: 30 })
-    expect(ranges()).toEqual(new Set(['2026-05-31..2026-06-30']))
+    expect(ranges()).toEqual(new Set(['TC;FL;EQ;VO;WF 2026-05-31..2026-06-30', 'DR 2026-05-21..2026-06-30']))
     fetch.mockClear()
-    await fetchEvents()
-    expect(ranges()).toEqual(new Set(['2026-06-20..2026-06-30'])) // config default: 10 days
+    await fetchEvents() // config default: 10 days
+    expect(ranges()).toEqual(new Set(['TC;FL;EQ;VO;WF 2026-06-20..2026-06-30', 'DR 2026-05-21..2026-06-30']))
+    fetch.mockClear()
+    await fetchEvents({ days: 90 }) // longer than droughts need: one query
+    expect(ranges()).toEqual(new Set(['TC;FL;EQ;VO;WF;DR 2026-04-01..2026-06-30']))
   })
 
   it('drops hazard types it did not ask for', async () => {
-    mockFetch(() => json(collection(makeEvent({ eventtype: 'EQ' as 'TC' }), makeEvent({ eventid: 2 }))))
-    const { features } = await fetchEvents()
+    mockFetch(() => json(collection(makeEvent({ eventtype: 'EQ' }), makeEvent({ eventid: 2 }))))
+    const { features } = await fetchEvents({ hazards: ['TC'] })
     expect(features.map((f) => f.properties.eventid)).toEqual([2])
+  })
+
+  it('leaves Green earthquakes and wildfires out when asked to', async () => {
+    const fetch = mockFetch(() => json(collection()))
+    const asked = () =>
+      fetch.mock.calls.map(([u]) => {
+        const q = new URL(String(u)).searchParams
+        return `${q.get('alertlevel')} ${q.get('eventlist')}`
+      })
+
+    await fetchEvents({ days: 90, skipManyGreen: true })
+    expect(asked()).toEqual(['Green TC;FL;VO;DR', 'Orange TC;FL;EQ;VO;WF;DR', 'Red TC;FL;EQ;VO;WF;DR'])
+    fetch.mockClear()
+    await fetchEvents({ days: 90, hazards: ['EQ'], skipManyGreen: true })
+    expect(asked()).toEqual(['Orange EQ', 'Red EQ']) // no Green query left to make
+  })
+
+  it('stops paging at maxPages', async () => {
+    const fetch = mockFetch((url) =>
+      url.searchParams.get('alertlevel') === 'Green'
+        ? json(collection(...Array.from({ length: 100 }, (_, i) => makeEvent({ eventid: Number(url.searchParams.get('pageNumber')) * 1000 + i }))))
+        : json(collection()),
+    )
+    const { features } = await fetchEvents({ hazards: ['TC'], maxPages: 3 })
+    expect(features).toHaveLength(300)
+    expect(fetch.mock.calls.filter(([u]) => String(u).includes('alertlevel=Green'))).toHaveLength(3)
   })
 
   it('keeps paging while pages come back full', async () => {
@@ -56,7 +91,7 @@ describe('fetchEvents', () => {
       return json(collection(...Array.from({ length: size }, (_, i) => makeEvent({ eventid: page * 1000 + i }))))
     })
 
-    const { features } = await fetchEvents()
+    const { features } = await fetchEvents({ hazards: ['TC'] })
     expect(features).toHaveLength(103)
     const orangePages = fetch.mock.calls.filter(([u]) => String(u).includes('alertlevel=Orange'))
     expect(orangePages).toHaveLength(2)

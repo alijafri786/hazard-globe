@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { useWatchAreas } from '../composables/useWatchAreas'
-import { HAZARD_LABELS, type HazardType } from '../types'
+import { HAZARD_TYPES, HAZARDS } from '../hazards'
 
 const props = defineProps<{ watch: ReturnType<typeof useWatchAreas>; busy: boolean }>()
 const emit = defineEmits<{ save: []; locate: [] }>()
@@ -35,10 +35,13 @@ const hasCentre = computed(() => draft.value?.lon !== undefined && draft.value?.
 
     <fieldset class="row">
       <legend>Hazards</legend>
-      <label v-for="h in (['TC', 'FL'] as HazardType[])" :key="h" class="check">
-        <input v-model="draft.hazards" type="checkbox" :value="h" /> {{ HAZARD_LABELS[h] }}
+      <label v-for="h in HAZARD_TYPES" :key="h" class="check">
+        <input v-model="draft.hazards" type="checkbox" :value="h" /> {{ HAZARDS[h].label }}
       </label>
     </fieldset>
+    <p v-if="draft.hazards.includes('EQ')" class="hint">
+      Earthquake alerts come after the shaking, when it was strong near this area: a prompt to check on people.
+    </p>
     <label v-if="draft.hazards.includes('TC')" class="check cone">
       <input v-model="draft.forecastAlerts" type="checkbox" />
       <span>
@@ -119,6 +122,12 @@ legend {
 .cone small {
   display: block;
   margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 6px 0 0;
   font-size: 12px;
   color: var(--muted);
 }

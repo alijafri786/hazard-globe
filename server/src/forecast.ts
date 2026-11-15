@@ -1,4 +1,5 @@
 import type { Geometry, Polygon } from 'geojson'
+import { HAZARDS } from './hazards.js'
 import type { GdacsCollection, HazardType } from './types.js'
 
 export interface TrackPoint {
@@ -22,9 +23,6 @@ export interface EventDetails {
   forecast: CycloneForecast | null
 }
 
-// A GDACS cyclone geometry collection mixes the wind buffers (Poly_Green/Orange/Red) with things that are
-// not an affected area: the uncertainty cone, the track, its points and the event's own centroid.
-const NOT_AFFECTED = /^(Poly_Cones|Point_Centroid|Point_Polygon_Point_\d+|Line_Line_\d+)$/
 const TRACK_POINT = /^Point_Polygon_Point_\d+$/
 
 /** GDACS dates carry no zone and are UTC */
@@ -54,10 +52,10 @@ function pointTime(key: unknown, issued: Date): Date | null {
 /** Splits an event's GDACS geometry into the area it affects and, for cyclones, its forecast. */
 export function splitGeometry(collection: GdacsCollection | null, eventtype: HazardType): EventDetails {
   const features = (collection?.features ?? []).filter((f) => f.geometry)
-  if (eventtype !== 'TC') return { affected: features.map((f) => f.geometry), forecast: null }
+  const affected = HAZARDS[eventtype]?.affected(features) ?? []
+  if (eventtype !== 'TC') return { affected, forecast: null }
 
   const kind = (f: (typeof features)[number]) => String(f.properties?.Class ?? '')
-  const affected = features.filter((f) => !NOT_AFFECTED.test(kind(f))).map((f) => f.geometry)
   const cone = features.find((f) => kind(f) === 'Poly_Cones' && f.geometry.type === 'Polygon')
   const issuedAt = (cone ?? features.find((f) => f.properties?.polygondate))?.properties?.polygondate
   if (typeof issuedAt !== 'string') return { affected, forecast: null }

@@ -56,7 +56,7 @@ test('look back day by day, then return to live', async ({ page }) => {
   await expect(listed(page)).toHaveText(['Storm Ongoing', 'Storm Brief'])
 
   await slider.fill('2')
-  await expect(page.getByText(`No storm or flood events on ${formatDay(today - 27 * DAY)}.`)).toBeVisible()
+  await expect(page.getByText(`No events on ${formatDay(today - 27 * DAY)}.`)).toBeVisible()
 
   await page.getByLabel('How far back').selectOption('7')
   expect(historyCalls).toEqual(['30', '7'])
