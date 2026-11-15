@@ -7,6 +7,7 @@ import { config } from './config.js'
 import { anySent, type Deliver } from './delivery.js'
 import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
+import { isQuakeFeed, QUAKE_FEEDS, type QuakeFeed, type QuakesSnapshot } from './earthquakes.js'
 import { fetchGeometryCollection } from './gdacs.js'
 import { isHazardType } from './hazards.js'
 import { HISTORY_DAYS, isHistoryDays, type HistoryDays } from './history.js'
@@ -41,6 +42,8 @@ export interface AppDeps {
   flightTrack: (icao24: string) => Promise<FlightTrack | null>
   /** Wind for the animation (see weather/wind.ts) */
   wind: () => Promise<WindGrid | null>
+  /** USGS earthquakes by feed (see earthquakes.ts) */
+  earthquakes?: (feed: QuakeFeed) => Promise<QuakesSnapshot | null>
   /** Present when ships are set up (an AISStream key) */
   ships?: Pick<Ships, 'snapshot' | 'details'>
   deliver: Deliver
@@ -216,6 +219,16 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     if (!Number.isInteger(mmsi) || mmsi <= 0 || mmsi > 999_999_999) return c.json({ error: 'bad MMSI' }, 400)
     const ship = deps.ships.details(mmsi)
     return ship ? c.json(ship) : c.json({ error: 'No recent report from this ship' }, 404)
+  })
+
+  // ~100 quakes a week at M4.5+, a few hundred a day at M2.5+: tens of KB before compression
+  app.get('/api/earthquakes', compress(), async (c) => {
+    const feed = c.req.query('feed') ?? 'week'
+    if (!isQuakeFeed(feed)) return c.json({ error: `feed must be one of ${Object.keys(QUAKE_FEEDS).join(', ')}` }, 400)
+    const snapshot = await deps.earthquakes?.(feed).catch(() => null)
+    if (!snapshot) return c.json({ error: 'Earthquake data unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=60')
+    return c.json(snapshot)
   })
 
   // Starlink alone is ~4 MB of JSON before compression

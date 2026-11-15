@@ -267,5 +267,6 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
   const timer = setInterval(() => timeline.mode.value === 'live' && void refresh(), 10 * 60_000)
   onBeforeUnmount(() => clearInterval(timer))
 
-  return { events: sorted, fetchedAt, days, loading, error, visible, refresh, flyTo }
+  /** every event loaded, shown or not */
+  return { events: sorted, all: events, fetchedAt, days, loading, error, visible, refresh, flyTo }
 }

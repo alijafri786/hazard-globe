@@ -477,3 +477,29 @@ describe('GET geometry', () => {
     expect((await get(60)).status).toBe(429)
   })
 })
+
+describe('GET /api/earthquakes', () => {
+  const earthquakes = vi.fn<NonNullable<AppDeps['earthquakes']>>(async (feed) => ({
+    feed,
+    fetchedAt: '2026-11-15T12:00:00.000Z',
+    generatedAt: '2026-11-15T11:59:00.000Z',
+    quakes: [],
+  }))
+
+  it('serves the past week by default, or the past day, and nothing else', async () => {
+    const { app } = setup({}, { earthquakes })
+    expect(await (await app.request('/api/earthquakes')).json()).toMatchObject({ feed: 'week', quakes: [] })
+    expect(earthquakes).toHaveBeenLastCalledWith('week')
+    expect((await app.request('/api/earthquakes?feed=day')).status).toBe(200)
+    expect(earthquakes).toHaveBeenLastCalledWith('day')
+    for (const feed of ['month', 'DAY', 'toString', '']) {
+      expect((await app.request(`/api/earthquakes?feed=${feed}`)).status).toBe(400)
+    }
+  })
+
+  it('answers 503 when USGS has never answered, or earthquakes are not set up', async () => {
+    earthquakes.mockResolvedValueOnce(null)
+    expect((await setup({}, { earthquakes }).app.request('/api/earthquakes')).status).toBe(503)
+    expect((await setup().app.request('/api/earthquakes')).status).toBe(503)
+  })
+})

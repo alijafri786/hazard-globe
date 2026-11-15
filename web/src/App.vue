@@ -9,6 +9,7 @@ import ShipPanel from './components/ShipPanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useCloudLayer } from './composables/useCloudLayer'
+import { useEarthquakeLayer } from './composables/useEarthquakeLayer'
 import { useFlightDetails } from './composables/useFlightDetails'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
@@ -28,6 +29,7 @@ const viewer = useViewer(globeEl)
 const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
+const quakes = useEarthquakeLayer(viewer, timeline, hazards.all)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -96,7 +98,7 @@ watch(search.found, (place) => {
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" />
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"
