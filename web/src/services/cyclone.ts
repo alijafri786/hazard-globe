@@ -1,12 +1,9 @@
-/** One feature of a GDACS geometry collection */
-export interface GeoFeature {
-  type: 'Feature'
-  geometry: { type: string; coordinates: unknown } | null
-  properties?: Record<string, unknown> | null
-}
+import { affectedFeatures, type GeoFeature, type HazardType } from '../hazards'
+
+export type { GeoFeature } from '../hazards'
 
 export interface CycloneParts {
-  /** wind buffers (or, for floods, everything): drawn as the affected area */
+  /** wind buffers (or, for other hazards, what hazards.ts counts as hit): drawn as the affected area */
   area: GeoFeature[]
   /** outer ring of the uncertainty cone, as [lon, lat] pairs */
   cone: number[][] | null
@@ -41,9 +38,9 @@ function pointTime(key: unknown, issued: Date): number | null {
 }
 
 /** Separates a GDACS geometry collection into what to draw how. Mirrors server/src/forecast.ts. */
-export function splitCyclone(features: GeoFeature[], eventtype: string): CycloneParts {
+export function splitCyclone(features: GeoFeature[], eventtype: HazardType): CycloneParts {
   const withGeometry = features.filter((f) => f.geometry)
-  if (eventtype !== 'TC') return { area: withGeometry, cone: null, track: [], forecastPoints: [] }
+  if (eventtype !== 'TC') return { area: affectedFeatures(features, eventtype), cone: null, track: [], forecastPoints: [] }
 
   const cone = withGeometry.find((f) => kind(f) === 'Poly_Cones' && f.geometry!.type === 'Polygon')
   const issuedAt = (cone ?? withGeometry.find((f) => f.properties?.polygondate))?.properties?.polygondate

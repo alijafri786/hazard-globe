@@ -1,4 +1,6 @@
-export type HazardType = 'TC' | 'FL'
+import type { HazardType } from './hazards'
+
+export type { HazardType } from './hazards'
 export type AlertLevel = 'Green' | 'Orange' | 'Red'
 
 export interface HazardEventProps {
@@ -13,6 +15,8 @@ export interface HazardEventProps {
   todate?: string
   url?: { report?: string }
   severitydata?: { severitytext?: string }
+  /** GLIDE disaster number, e.g. "EQ-2026-000186-VUT"; often empty */
+  glide?: string
 }
 
 export interface HazardEvent {
@@ -168,9 +172,4 @@ export const ALERT_COLOURS: Record<AlertLevel, string> = {
   Red: '#e5484d',
   Orange: '#f5a524',
   Green: '#46a758',
-}
-
-export const HAZARD_LABELS: Record<HazardType, string> = {
-  TC: 'Tropical cyclones',
-  FL: 'Floods',
 }

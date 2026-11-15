@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
+import type { HazardType } from './hazards.js'
 
-export type HazardType = 'TC' | 'FL'
+export type { HazardType } from './hazards.js'
 export type AlertLevel = 'Green' | 'Orange' | 'Red'
 
 export const ALERT_RANK: Record<AlertLevel, number> = { Green: 0, Orange: 1, Red: 2 }
@@ -19,6 +20,8 @@ export interface GdacsEventProps {
   iscurrent?: string | boolean
   url?: { report?: string; details?: string; geometry?: string }
   severitydata?: { severity?: number; severitytext?: string; severityunit?: string }
+  /** GLIDE disaster number, e.g. "EQ-2026-000186-VUT"; often empty */
+  glide?: string
   [key: string]: unknown
 }
 

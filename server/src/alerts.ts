@@ -1,15 +1,17 @@
 import type { CycloneForecast, EventDetails, TrackPoint } from './forecast.js'
+import { HAZARDS } from './hazards.js'
 import { touchesArea } from './matcher.js'
 import {
   ALERT_RANK,
   type AlertLevel,
   type AlertPayload,
   type GdacsEvent,
+  type HazardType,
   type Subscription,
   type WatchArea,
 } from './types.js'
 
-const HAZARD_NAME = { TC: 'Tropical cyclone', FL: 'Flood' } as const
+const nameOfType = (t: HazardType) => HAZARDS[t]?.name ?? 'Hazard'
 
 export interface PlannedAlert {
   sub: Subscription
@@ -33,15 +35,16 @@ function wants(area: WatchArea, event: GdacsEvent, key: string): boolean {
 export const eventKey = (e: GdacsEvent) => `${e.properties.eventtype}-${e.properties.eventid}`
 export const coneKey = (e: GdacsEvent) => `${eventKey(e)}:cone`
 
-const nameOf = (e: GdacsEvent) => e.properties.name || e.properties.description || HAZARD_NAME[e.properties.eventtype]
+const nameOf = (e: GdacsEvent) => e.properties.name || e.properties.description || nameOfType(e.properties.eventtype)
 
-function describe(e: GdacsEvent): { title: string; body: string } {
+function describe(e: GdacsEvent, areas: WatchArea[]): { title: string; body: string } {
   const p = e.properties
   const where = p.country ? ` — ${p.country}` : ''
   const severity = p.severitydata?.severitytext ? `\n${p.severitydata.severitytext}` : ''
+  const note = HAZARDS[p.eventtype]?.note
   return {
-    title: `${p.alertlevel.toUpperCase()} ${HAZARD_NAME[p.eventtype]} alert`,
-    body: `${nameOf(e)}${where}${severity}`,
+    title: `${p.alertlevel.toUpperCase()} ${nameOfType(p.eventtype)} alert`,
+    body: `${nameOf(e)}${where}${severity}\nNear: ${areas.map((a) => a.label).join(', ')}${note ? `\n${note}` : ''}`,
   }
 }
 
@@ -70,7 +73,7 @@ function describeForecast(e: GdacsEvent, forecast: CycloneForecast, areas: Watch
     .filter(([, t]) => t)
     .map(([label, t]) => `${label} around ${day(t!.time)}`)
   return {
-    title: `Forecast: ${HAZARD_NAME.TC} may reach ${areas.length === 1 ? areas[0].label : 'your areas'}`,
+    title: `Forecast: ${nameOfType('TC')} may reach ${areas.length === 1 ? areas[0].label : 'your areas'}`,
     body:
       `${nameOf(e)}${p.country ? ` — ${p.country}` : ''} (${p.alertlevel})\n` +
       `Its forecast cone reaches: ${areas.map((a) => a.label).join(', ')}\n` +
@@ -114,13 +117,12 @@ export async function planAlerts(
 
       const hit = pending.filter((a) => touchesArea(a, event.geometry, details!.affected))
       if (hit.length) {
-        const { title, body } = describe(event)
         planned.push({
           sub,
           eventKey: key,
           level: p.alertlevel,
           areaIds: hit.map((a) => a.id),
-          payload: { title, body: `${body}\nNear: ${hit.map((a) => a.label).join(', ')}`, url: p.url?.report, tag: key },
+          payload: { ...describe(event, hit), url: p.url?.report, tag: key },
         })
       }
 

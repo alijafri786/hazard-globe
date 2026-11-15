@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import type { useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { formatDay, type useTimeline } from '../composables/useTimeline'
-import { ALERT_COLOURS, HAZARD_LABELS, type HazardType } from '../types'
+import { HAZARD_TYPES, HAZARDS, hazardSymbol } from '../hazards'
+import { ALERT_COLOURS } from '../types'
 import FloodForecastControls from './FloodForecastControls.vue'
 import TimelineControls from './TimelineControls.vue'
 
@@ -15,7 +16,6 @@ const props = defineProps<{
 const { events, fetchedAt, days, loading, error, visible, refresh, flyTo } = props.layer
 const { mode, day } = props.timeline
 
-const hazardTypes: HazardType[] = ['TC', 'FL']
 const updated = computed(() =>
   fetchedAt.value
     ? new Date(fetchedAt.value).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
@@ -23,8 +23,8 @@ const updated = computed(() =>
 )
 const empty = computed(() =>
   mode.value === 'history'
-    ? `No storm or flood events on ${formatDay(day.value)}.`
-    : `No active storm or flood events in the last ${days.value ?? 10} days.`,
+    ? `No events on ${formatDay(day.value)}.`
+    : `No active events in the last ${days.value ?? 10} days.`,
 )
 </script>
 
@@ -33,10 +33,10 @@ const empty = computed(() =>
     <TimelineControls :timeline="timeline" />
 
     <div class="toggles">
-      <label v-for="h in hazardTypes" :key="h" class="toggle">
+      <label v-for="h in HAZARD_TYPES" :key="h" class="toggle">
         <input v-model="visible[h]" type="checkbox" />
-        <span class="ring" :class="h" />
-        {{ HAZARD_LABELS[h] }}
+        <img class="symbol" :src="hazardSymbol(h, 'transparent')" alt="" width="14" height="14" />
+        {{ HAZARDS[h].label }}
       </label>
     </div>
 
@@ -62,8 +62,8 @@ const empty = computed(() =>
         <button class="event" @click="flyTo(e)">
           <i class="dot" :style="{ background: ALERT_COLOURS[e.properties.alertlevel] }" />
           <span class="text">
-            <strong>{{ e.properties.name || e.properties.description || HAZARD_LABELS[e.properties.eventtype] }}</strong>
-            <small>{{ e.properties.eventtype === 'TC' ? 'Cyclone' : 'Flood' }} · {{ e.properties.country || 'Open sea' }}</small>
+            <strong>{{ e.properties.name || e.properties.description || HAZARDS[e.properties.eventtype].noun }}</strong>
+            <small>{{ HAZARDS[e.properties.eventtype].noun }} · {{ e.properties.country || 'Open sea' }}</small>
           </span>
         </button>
       </li>
@@ -74,7 +74,8 @@ const empty = computed(() =>
 <style scoped>
 .toggles {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   margin-bottom: 10px;
 }
 
@@ -86,15 +87,8 @@ const empty = computed(() =>
   cursor: pointer;
 }
 
-.ring {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-}
-
-.ring.FL {
-  border-color: #4cc3ff;
+.symbol {
+  flex: none;
 }
 
 .legend {

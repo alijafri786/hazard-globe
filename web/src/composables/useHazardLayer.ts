@@ -20,13 +20,21 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } fr
 import { api } from '../services/api'
 import { splitCyclone, type GeoFeature } from '../services/cyclone'
 import { escapeHtml } from '../services/html'
-import { ALERT_COLOURS, type AlertLevel, type HazardEvent, type HazardType } from '../types'
+import { HAZARD_TYPES, HAZARDS, hazardSymbol, type HazardType } from '../hazards'
+import { ALERT_COLOURS, type AlertLevel, type HazardEvent } from '../types'
+
+const isHazardType = (t: unknown): t is HazardType => (HAZARD_TYPES as readonly unknown[]).includes(t)
 import { formatDay, type useTimeline } from './useTimeline'
 
 const RANK: Record<AlertLevel, number> = { Red: 2, Orange: 1, Green: 0 }
-const HAZARD_OUTLINE: Record<HazardType, Color> = {
-  TC: Color.WHITE,
-  FL: Color.fromCssColorString('#4cc3ff'),
+
+/** What the shaded footprint shows, where that isn't obvious */
+const FOOTPRINT_NOTE: Partial<Record<HazardType, string>> = {
+  TC: `Track: solid where it has been, dashed where it is forecast to go. The dashed white
+    cone is where its centre is likely to go, not how big the storm is.`,
+  EQ: `Shaded: where shaking was strong (intensity VI or more), from the USGS ShakeMap. Where there is none yet,
+    a 100 km circle round the epicentre.`,
+  VO: 'Shaded: the circle GDACS draws round the volcano, not a forecast of where ash or lava will go.',
 }
 
 function eventPosition(e: HazardEvent): Cartesian3 | null {
@@ -39,22 +47,21 @@ function eventPosition(e: HazardEvent): Cartesian3 | null {
 function describe(e: HazardEvent): string {
   const p = e.properties
   const rows = [
+    ['Type', HAZARDS[p.eventtype].noun],
     ['Alert', p.alertlevel],
     ['Country', p.country],
     ['Started', p.fromdate?.slice(0, 10)],
     ['Last update', p.todate?.slice(0, 10)],
     ['Severity', p.severitydata?.severitytext],
+    ['GLIDE number', p.glide],
   ].filter(([, v]) => v)
   const table = rows.map(([k, v]) => `<tr><th>${k}</th><td>${escapeHtml(String(v))}</td></tr>`).join('')
   const link = p.url?.report
     ? `<p><a href="${escapeHtml(p.url.report)}" target="_blank" rel="noopener">Full GDACS report ↗</a></p>`
     : ''
-  const track =
-    p.eventtype === 'TC'
-      ? `<p style="font-size:13px">Track: solid where it has been, dashed where it is forecast to go. The dashed white
-        cone is where its centre is likely to go, not how big the storm is.</p>`
-      : ''
-  return `<table class="cesium-infoBox-defaultTable">${table}</table>${track}${link}
+  const note = FOOTPRINT_NOTE[p.eventtype]
+  const footprint = note ? `<p style="font-size:13px">${note}</p>` : ''
+  return `<table class="cesium-infoBox-defaultTable">${table}</table>${footprint}${link}
     <p style="opacity:.7;font-size:12px">Source: GDACS. Not an official warning — follow your national weather service.</p>`
 }
 
@@ -65,7 +72,7 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
   const days = ref<number | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const visible = ref<Record<HazardType, boolean>>({ TC: true, FL: true })
+  const visible = ref(Object.fromEntries(HAZARD_TYPES.map((t) => [t, true])) as Record<HazardType, boolean>)
 
   const points = new CustomDataSource('gdacs-events')
   let footprint: GeoJsonDataSource | null = null
@@ -84,9 +91,10 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
     points.entities.removeAll()
     for (const e of events.value) {
       const position = eventPosition(e)
-      if (!position) continue
       const p = e.properties
-      const colour = Color.fromCssColorString(ALERT_COLOURS[p.alertlevel] ?? '#888')
+      if (!position || !isHazardType(p.eventtype)) continue
+      // Shape and outline say what it is; the fill, its alert level
+      const size = 12 + (RANK[p.alertlevel] ?? 0) * 4
       points.entities.add(
         new Entity({
           id: `${p.eventtype}-${p.eventid}`,
@@ -94,16 +102,16 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
           position,
           show: shown(e),
           description: describe(e),
-          point: {
-            pixelSize: 8 + RANK[p.alertlevel] * 4,
-            color: colour,
-            outlineColor: HAZARD_OUTLINE[p.eventtype],
-            outlineWidth: 2,
-            heightReference: HeightReference.CLAMP_TO_GROUND,
+          billboard: {
+            image: hazardSymbol(p.eventtype, ALERT_COLOURS[p.alertlevel] ?? '#888', 32),
+            width: size,
+            height: size,
+            // On the ground (height 0 above the terrain), but not CLAMP_TO_GROUND: with world terrain on
+            // a real GPU, Cesium's clamped billboards are drawn through the Earth, so markers on the far
+            // side showed on the near one (SwiftShader, as in the tests, doesn't show it). Relative
+            // heights are depth-tested like any billboard. No disableDepthTestDistance, for the same reason.
+            heightReference: HeightReference.RELATIVE_TO_GROUND,
             scaleByDistance: new NearFarScalar(1e6, 1.4, 2e7, 0.8),
-            // No disableDepthTestDistance: it would draw markers through the Earth from the far side.
-            // With the globe's default depthTestAgainstTerrain = false, Cesium still hides anything
-            // behind the globe but draws ground-clamped markers over hills instead of half-burying them.
           },
           label: {
             text: p.name || '',
