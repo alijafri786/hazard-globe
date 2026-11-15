@@ -231,3 +231,26 @@ export interface PlaceClimatology {
   peakMonths: number[]
   strongest: { name: string; year: number; kt: number } | null
 }
+
+/** NOAA SWPC's OVATION aurora forecast: % chance overhead on a 1° grid, row-major from the north-west */
+export interface AuroraGrid {
+  observedAt: string
+  forecastAt: string
+  cols: 360
+  rows: 180
+  /** base64 of cols × rows bytes */
+  data: string
+}
+
+export interface KpPoint {
+  time: string
+  kp: number
+  observed: boolean
+}
+
+export interface SpaceWeatherSummary {
+  fetchedAt: string
+  now: KpPoint | null
+  kp: KpPoint[]
+  scales: { G: number; S: number; R: number }
+}

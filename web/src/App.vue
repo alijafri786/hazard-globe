@@ -9,7 +9,9 @@ import LayerList from './components/LayerList.vue'
 import MapLegend from './components/MapLegend.vue'
 import SatellitePanel from './components/SatellitePanel.vue'
 import ShipPanel from './components/ShipPanel.vue'
+import SpaceWeatherCard from './components/SpaceWeatherCard.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
+import { useAuroraLayer } from './composables/useAuroraLayer'
 import { useCameraControls } from './composables/useCameraControls'
 import { useClimatologyLayer } from './composables/useClimatologyLayer'
 import { useCloudLayer } from './composables/useCloudLayer'
@@ -39,6 +41,7 @@ const forecast = useFloodForecastLayer(viewer, timeline)
 const quakes = useEarthquakeLayer(viewer, timeline, hazards.all)
 const climatology = useClimatologyLayer(viewer)
 const gibs = useGibsLayers(viewer, timeline)
+const aurora = useAuroraLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -50,7 +53,7 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
-const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, clouds, wind, flights, ships, satellites, timeline })
+const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, aurora, clouds, wind, flights, ships, satellites, timeline })
 const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
@@ -180,6 +183,7 @@ watch(search.found, (place) => {
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" :card="flightCard" :mode="timeline.mode.value" />
       <template v-else-if="tab === 'space'">
         <GibsControls :gibs="gibs" tab="space" />
+        <SpaceWeatherCard :aurora="aurora" :areas="watchAreas.areas.value" :live="timeline.mode.value === 'live'" />
         <ShipPanel :layer="ships" :mode="timeline.mode.value" />
         <SatellitePanel :layer="satellites" :mode="timeline.mode.value" />
       </template>

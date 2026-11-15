@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, type WritableComputedRef } from 'vue'
+import { AURORA_COLOURS, AURORA_MAX, AURORA_MIN, type useAuroraLayer } from '../composables/useAuroraLayer'
 import type { useClimatologyLayer } from '../composables/useClimatologyLayer'
 import type { useCloudLayer } from '../composables/useCloudLayer'
 import { DEPTH_BANDS, type useEarthquakeLayer } from '../composables/useEarthquakeLayer'
@@ -45,6 +46,7 @@ export interface LayerDeps {
   quakes: ReturnType<typeof useEarthquakeLayer>
   climatology: ReturnType<typeof useClimatologyLayer>
   gibs: ReturnType<typeof useGibsLayers>
+  aurora: ReturnType<typeof useAuroraLayer>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
   flights: ReturnType<typeof useFlightLayer>
@@ -162,6 +164,16 @@ export function createLayerRegistry(d: LayerDeps) {
       liveOnly: true,
     },
     {
+      id: 'aurora',
+      label: 'Aurora forecast',
+      group: 'Sea & space',
+      on: toggle(
+        () => d.aurora.enabled.value,
+        (on) => (d.aurora.enabled.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
       id: 'satellites',
       label: 'Satellites',
       group: 'Sea & space',
@@ -216,6 +228,9 @@ export function createLayerRegistry(d: LayerDeps) {
     }
     for (const id of GIBS_IDS) {
       if (showing(`gibs-${id}`)) out.push({ title: GIBS[id].legend.title, gradient: GIBS[id].legend.colours, ends: GIBS[id].legend.ends })
+    }
+    if (showing('aurora')) {
+      out.push({ title: 'Aurora, % chance overhead', gradient: AURORA_COLOURS, ends: [`${AURORA_MIN}`, `${AURORA_MAX}+`] })
     }
     if (showing('wind')) {
       out.push({ title: 'Wind', gradient: WIND_SCALE.colours, ends: ['Calm', `${kmh(WIND_SCALE.max)}+ km/h`] })
