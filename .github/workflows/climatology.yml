@@ -23,7 +23,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # No lifecycle scripts: this job can push to the repository, and the build needs none
+      - run: npm ci --ignore-scripts
       # Downloads the since-1980 CSV (~145 MB) and writes server/assets/climatology/
       - run: npm run climatology --workspace server
       - name: Open a pull request if the data changed
