@@ -20,6 +20,11 @@ export interface CycloneForecast {
 export interface EventDetails {
   /** what the event is expected to hit: cyclone wind buffers, flood extents */
   affected: Geometry[]
+  /**
+   * GDACS's own map shows it reached nowhere that counts (an earthquake whose ShakeMap has no strong
+   * shaking), so alerts mustn't fall back to the event's point as they do while there's no footprint yet
+   */
+  reachesNowhere?: boolean
   forecast: CycloneForecast | null
 }
 
@@ -51,9 +56,12 @@ function pointTime(key: unknown, issued: Date): Date | null {
 
 /** Splits an event's GDACS geometry into the area it affects and, for cyclones, its forecast. */
 export function splitGeometry(collection: GdacsCollection | null, eventtype: HazardType): EventDetails {
-  const features = (collection?.features ?? []).filter((f) => f.geometry)
-  const affected = HAZARDS[eventtype]?.affected(features) ?? []
+  const hit = HAZARDS[eventtype]?.affected(collection?.features ?? []) ?? []
+  if (hit === 'none') return { affected: [], reachesNowhere: true, forecast: null }
+  const affected = hit
   if (eventtype !== 'TC') return { affected, forecast: null }
+
+  const features = (collection?.features ?? []).filter((f) => f.geometry)
 
   const kind = (f: (typeof features)[number]) => String(f.properties?.Class ?? '')
   const cone = features.find((f) => kind(f) === 'Poly_Cones' && f.geometry.type === 'Polygon')

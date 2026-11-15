@@ -118,7 +118,10 @@ export async function fetchGeometryCollection(
   if (hit) return hit
 
   const params = new URLSearchParams({ eventtype, eventid: String(eventid), episodeid: String(episodeid) })
-  const data = await getJson<GdacsCollection>(`${BASE}/polygons/getgeometry?${params}`)
+  const raw = await getJson<GdacsCollection>(`${BASE}/polygons/getgeometry?${params}`)
+  const trim = HAZARDS[eventtype]?.trim
+  // e.g. an earthquake's weak contours: most of its size, never drawn or matched
+  const data = raw?.features && trim ? ({ ...raw, features: trim(raw.features) } as GdacsCollection) : raw
   if (data?.features?.length) {
     geometryCache.set(key, data)
     if (geometryCache.size > GEOMETRY_CACHE_SIZE) geometryCache.delete(geometryCache.keys().next().value as string)

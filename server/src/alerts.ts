@@ -32,6 +32,19 @@ function wants(area: WatchArea, event: GdacsEvent, key: string): boolean {
   return !prev || ALERT_RANK[p.alertlevel] > ALERT_RANK[prev.level] // new, or escalated
 }
 
+/**
+ * Whether the event could reach the area, judged from its point: false only for types whose footprint
+ * can't run further than maxReachKm from it. Saves fetching footprints of events on the far side of the
+ * world from everyone.
+ */
+function withinReach(area: WatchArea, event: GdacsEvent): boolean {
+  const reach = HAZARDS[event.properties.eventtype]?.maxReachKm
+  const g = event.geometry
+  if (reach === undefined || g?.type !== 'Point') return true
+  const [lon, lat] = g.coordinates
+  return km(area, { lon, lat }) <= reach + area.radiusKm
+}
+
 export const eventKey = (e: GdacsEvent) => `${e.properties.eventtype}-${e.properties.eventid}`
 export const coneKey = (e: GdacsEvent) => `${eventKey(e)}:cone`
 
@@ -107,7 +120,7 @@ export async function planAlerts(
     let details: EventDetails | undefined
 
     for (const sub of subs) {
-      const pending = sub.areas.filter((a) => wants(a, event, key))
+      const pending = sub.areas.filter((a) => wants(a, event, key) && withinReach(a, event))
       const conePending =
         p.eventtype === 'TC'
           ? sub.areas.filter((a) => a.forecastAlerts && !a.notified[key] && wants(a, event, cone))
@@ -115,7 +128,9 @@ export async function planAlerts(
       if (!pending.length && !conePending.length) continue
       details ??= await detailsFor(event)
 
-      const hit = pending.filter((a) => touchesArea(a, event.geometry, details!.affected))
+      // A footprint known to reach nowhere has no point to fall back on
+      const point = details.reachesNowhere ? null : event.geometry
+      const hit = pending.filter((a) => touchesArea(a, point, details!.affected))
       if (hit.length) {
         planned.push({
           sub,
