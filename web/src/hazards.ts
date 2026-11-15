@@ -28,9 +28,28 @@ export const HAZARDS: Record<HazardType, HazardMeta> = {
   DR: { label: 'Droughts', noun: 'Drought', plural: 'droughts', outline: '#c8a165', shape: 'hexagon' },
 }
 
+/**
+ * What a watch area can be alerted about besides GDACS events: NOAA's tsunami messages, and clusters of
+ * fires from NASA FIRMS (offered only when the server has a FIRMS key). Same list as the server's.
+ */
+export const EXTRA_HAZARDS = ['TS', 'HS'] as const
+export type ExtraHazard = (typeof EXTRA_HAZARDS)[number]
+export const ALERT_HAZARDS = [...HAZARD_TYPES, ...EXTRA_HAZARDS] as const
+export type AlertHazard = (typeof ALERT_HAZARDS)[number]
+
+export const EXTRA_HAZARD_LABELS: Record<ExtraHazard, { label: string; plural: string }> = {
+  TS: { label: 'Tsunami messages', plural: 'tsunami messages' },
+  HS: { label: 'Fires nearby', plural: 'fires nearby' },
+}
+
+/** How a hazard a watch area chose is named in its checkbox */
+export const alertHazardLabel = (h: AlertHazard) => (h === 'TS' || h === 'HS' ? EXTRA_HAZARD_LABELS[h].label : HAZARDS[h].label)
+
 /** "Storms", "Storms and floods", "Storms, floods and earthquakes" */
-export function hazardList(types: readonly HazardType[]): string {
-  const words = HAZARD_TYPES.filter((t) => types.includes(t)).map((t) => HAZARDS[t].plural)
+export function hazardList(types: readonly AlertHazard[]): string {
+  const words = ALERT_HAZARDS.filter((t) => types.includes(t)).map((t) =>
+    t === 'TS' || t === 'HS' ? EXTRA_HAZARD_LABELS[t].plural : HAZARDS[t].plural,
+  )
   const text = words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? '')
   return text.charAt(0).toUpperCase() + text.slice(1)
 }

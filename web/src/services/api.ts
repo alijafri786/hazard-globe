@@ -1,5 +1,8 @@
 import type {
   AuroraGrid,
+  DartReadings,
+  DartStation,
+  TsunamiMessage,
   EventReports,
   ChannelView,
   SpaceWeatherSummary,
@@ -88,6 +91,12 @@ export const api = {
       throw err
     })
   },
+
+  tsunami: () => request<{ fetchedAt: string; messages: TsunamiMessage[] }>('/api/tsunami'),
+
+  dartStations: () => request<{ stations: DartStation[] }>('/api/dart'),
+
+  dartReadings: (id: string) => request<DartReadings>(`/api/dart/${encodeURIComponent(id)}`),
 
   aurora: () => request<AuroraGrid>('/api/space/aurora'),
 

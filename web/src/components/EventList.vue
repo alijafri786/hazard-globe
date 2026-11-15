@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { useClimatologyLayer } from '../composables/useClimatologyLayer'
 import type { useEarthquakeLayer } from '../composables/useEarthquakeLayer'
 import type { useGibsLayers } from '../composables/useGibsLayers'
+import type { useTsunamiLayer } from '../composables/useTsunamiLayer'
 import type { useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { formatDay, type useTimeline } from '../composables/useTimeline'
@@ -11,6 +12,7 @@ import { ALERT_COLOURS } from '../types'
 import ClimatologyControls from './ClimatologyControls.vue'
 import EarthquakeControls from './EarthquakeControls.vue'
 import GibsControls from './GibsControls.vue'
+import TsunamiControls from './TsunamiControls.vue'
 import FloodForecastControls from './FloodForecastControls.vue'
 import TimelineControls from './TimelineControls.vue'
 
@@ -21,6 +23,7 @@ const props = defineProps<{
   quakes: ReturnType<typeof useEarthquakeLayer>
   climatology: ReturnType<typeof useClimatologyLayer>
   gibs: ReturnType<typeof useGibsLayers>
+  tsunami: ReturnType<typeof useTsunamiLayer>
 }>()
 const { events, fetchedAt, days, loading, error, visible, refresh, flyTo } = props.layer
 const { mode, day } = props.timeline
@@ -56,6 +59,7 @@ const empty = computed(() =>
     <FloodForecastControls :forecast="forecast" :timeline="timeline" />
     <EarthquakeControls :quakes="quakes" :timeline="timeline" />
     <GibsControls :gibs="gibs" tab="events" />
+    <TsunamiControls :tsunami="tsunami" :timeline="timeline" />
     <ClimatologyControls :climatology="climatology" />
 
     <div class="meta">

@@ -27,6 +27,7 @@ import { useSearchPin } from './composables/useSearchPin'
 import { useShipLayer } from './composables/useShipLayer'
 import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
+import { useTsunamiLayer } from './composables/useTsunamiLayer'
 import { useUrlState, type Tab } from './composables/useUrlState'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
@@ -42,6 +43,7 @@ const quakes = useEarthquakeLayer(viewer, timeline, hazards.all)
 const climatology = useClimatologyLayer(viewer)
 const gibs = useGibsLayers(viewer, timeline)
 const aurora = useAuroraLayer(viewer, timeline)
+const tsunami = useTsunamiLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -53,7 +55,7 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
-const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, aurora, clouds, wind, flights, ships, satellites, timeline })
+const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, aurora, tsunami, clouds, wind, flights, ships, satellites, timeline })
 const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
@@ -170,7 +172,7 @@ watch(search.found, (place) => {
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" :gibs="gibs" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" :gibs="gibs" :tsunami="tsunami" />
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"
@@ -201,6 +203,15 @@ watch(search.found, (place) => {
        it has no room below its header -->
   <LayerList v-if="layerListOpen && !embedded" :layers="layers" @close="layerListOpen = false" />
   <MapLegend :layers="layers" :beside="panelOpen && !embedded" />
+
+  <!-- A tsunami warning in force is shown whatever else is on screen, with where to read it -->
+  <div v-if="tsunami.active.value.length && timeline.mode.value === 'live'" class="tsunami-banner" role="alert">
+    <template v-for="m in tsunami.active.value" :key="m.id">
+      <strong>Tsunami {{ m.type }}:</strong> {{ m.region }}.
+      <a :href="m.url" target="_blank" rel="noopener">NOAA bulletin ↗</a>
+    </template>
+    <span>Follow your local authorities.</span>
+  </div>
 
   <!-- So a past day is never mistaken for what is happening now -->
   <div v-if="timeline.mode.value === 'history' && !picking" class="history-badge" role="status">
@@ -264,6 +275,32 @@ watch(search.found, (place) => {
   border-radius: 8px;
   background: var(--line);
   font-size: 11px;
+}
+
+.tsunami-banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 20;
+  transform: translateX(-50%);
+  max-width: min(720px, calc(100% - 32px));
+  padding: 8px 14px;
+  border: 1px solid var(--red);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: #3a0d12;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.tsunami-banner a {
+  color: var(--text);
+}
+
+.tsunami-banner span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .open-full {

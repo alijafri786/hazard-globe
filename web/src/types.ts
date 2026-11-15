@@ -1,6 +1,6 @@
-import type { HazardType } from './hazards'
+import type { AlertHazard, HazardType } from './hazards'
 
-export type { HazardType } from './hazards'
+export type { AlertHazard, HazardType } from './hazards'
 export type AlertLevel = 'Green' | 'Orange' | 'Red'
 
 export interface HazardEventProps {
@@ -49,7 +49,7 @@ export interface WatchArea {
   lon: number
   lat: number
   radiusKm: number
-  hazards: HazardType[]
+  hazards: AlertHazard[]
   minAlert: AlertLevel
   /** also alert when a cyclone's forecast cone reaches the area */
   forecastAlerts?: boolean
@@ -76,6 +76,8 @@ export interface ServerChannels {
   push: boolean
   email: boolean
   telegram: { bot: string } | null
+  /** the server has a NASA FIRMS key, so it can alert about fires near an area */
+  fires?: boolean
 }
 
 /** [icao24, callsign, originCountry, lon, lat, altitudeM, velocityMs, trackDeg, verticalRateMs] */
@@ -261,4 +263,33 @@ export interface SpaceWeatherSummary {
   now: KpPoint | null
   kp: KpPoint[]
   scales: { G: number; S: number; R: number }
+}
+
+export type TsunamiMessageType = 'warning' | 'threat' | 'advisory' | 'watch' | 'information' | 'cancellation'
+
+/** A message from NOAA's tsunami warning centres (see server/src/tsunami.ts) */
+export interface TsunamiMessage {
+  id: string
+  centre: 'PTWC' | 'NTWC'
+  event: string
+  type: TsunamiMessageType
+  issuedAt: string
+  region: string
+  lat: number
+  lon: number
+  magnitude: number | null
+  url: string
+}
+
+export interface DartStation {
+  id: string
+  name: string
+  lat: number
+  lon: number
+}
+
+export interface DartReadings {
+  id: string
+  readings: { time: string; heightM: number }[]
+  eventMode: boolean
 }

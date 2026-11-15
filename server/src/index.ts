@@ -70,8 +70,9 @@ const app = createApp({
   earthquakes: createEarthquakes(),
   climatology: await loadClimatology(),
   spaceWeather: createSpaceWeather(),
-  tsunami,
-  dart: createDart(),
+  // Never in end-to-end runs: they mustn't reach tsunami.gov or NDBC
+  tsunami: e2e ? undefined : tsunami,
+  dart: e2e ? undefined : createDart(),
   // Never in end-to-end runs: they mustn't reach ReliefWeb
   reliefweb: config.reliefwebAppname && !e2e ? createReliefWeb({ appname: config.reliefwebAppname }) : undefined,
   // Never in end-to-end runs: they mustn't open a real stream

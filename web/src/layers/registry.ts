@@ -10,6 +10,7 @@ import type { useHazardLayer } from '../composables/useHazardLayer'
 import { ORBIT_CLASSES, SATELLITE_GROUPS, type SatelliteGroup, type useSatelliteLayer } from '../composables/useSatelliteLayer'
 import { SHIP_KINDS, type useShipLayer } from '../composables/useShipLayer'
 import type { useTimeline } from '../composables/useTimeline'
+import { DART_COLOUR, MESSAGE_STYLE, type useTsunamiLayer } from '../composables/useTsunamiLayer'
 import { WIND_SCALE, type useWindLayer } from '../composables/useWindLayer'
 import { HAZARD_TYPES, HAZARDS, hazardSymbol } from '../hazards'
 import { GIBS, GIBS_IDS } from './gibs'
@@ -47,6 +48,7 @@ export interface LayerDeps {
   climatology: ReturnType<typeof useClimatologyLayer>
   gibs: ReturnType<typeof useGibsLayers>
   aurora: ReturnType<typeof useAuroraLayer>
+  tsunami: ReturnType<typeof useTsunamiLayer>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
   flights: ReturnType<typeof useFlightLayer>
@@ -86,6 +88,26 @@ export function createLayerRegistry(d: LayerDeps) {
       on: toggle(
         () => d.quakes.enabled.value,
         (on) => (d.quakes.enabled.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
+      id: 'tsunami',
+      label: 'Tsunami messages',
+      group: 'Events',
+      on: toggle(
+        () => d.tsunami.enabled.value,
+        (on) => (d.tsunami.enabled.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
+      id: 'dart',
+      label: 'DART buoys',
+      group: 'Events',
+      on: toggle(
+        () => d.tsunami.buoysOn.value,
+        (on) => (d.tsunami.buoysOn.value = on),
       ),
       liveOnly: true,
     },
@@ -218,6 +240,17 @@ export function createLayerRegistry(d: LayerDeps) {
         title: `Storms a decade within ${d.climatology.info.value?.reachKm ?? 100} km`,
         gradient: SEQUENTIAL,
         ends: [fmt(scale.min), `${fmt(scale.max)}+`],
+      })
+    }
+    if (showing('tsunami') || showing('dart')) {
+      out.push({
+        title: 'Tsunamis (NOAA)',
+        swatches: [
+          ...(showing('tsunami')
+            ? [MESSAGE_STYLE.warning, MESSAGE_STYLE.advisory, MESSAGE_STYLE.information].map((s) => ({ colour: s.colour, label: s.label }))
+            : []),
+          ...(showing('dart') ? [{ colour: DART_COLOUR, label: 'DART buoy' }] : []),
+        ],
       })
     }
     if (showing('usgs-quakes')) {
