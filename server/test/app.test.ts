@@ -88,9 +88,9 @@ const emailOf = async (id: string) => (await stored(id)).channels.find((c): c is
 
 describe('GET /api/channels', () => {
   it('lists the ways this server can notify people', async () => {
-    expect(await (await setup().app.request('/api/channels')).json()).toEqual({ push: true, email: true, telegram: { bot: 'hg_bot' } })
+    expect(await (await setup().app.request('/api/channels')).json()).toEqual({ push: true, email: true, telegram: { bot: 'hg_bot' }, fires: false })
     const bare = setup({}, { email: undefined, telegramBot: undefined, pushEnabled: false }).app
-    expect(await (await bare.request('/api/channels')).json()).toEqual({ push: false, email: false, telegram: null })
+    expect(await (await bare.request('/api/channels')).json()).toEqual({ push: false, email: false, telegram: null, fires: false })
   })
 })
 
@@ -660,5 +660,30 @@ describe('tsunami and DART routes', () => {
     expect((await app.request('/api/dart/21415')).status).toBe(200)
     expect((await app.request('/api/dart/99999')).status).toBe(404)
     expect((await app.request('/api/dart/..%2Fetc')).status).toBe(400)
+  })
+})
+
+describe('fire routes', () => {
+  const fires = {
+    grid: vi.fn(async () => ({ fetchedAt: '2026-11-15T12:00:00.000Z', count: 0, cols: 1440, rows: 720, data: '' })),
+    inBox: vi.fn(async (box: [number, number, number, number]) => (box[2] - box[0] > 10 ? null : [])),
+  }
+
+  it('says when there is no FIRMS key, and tells the alert screen', async () => {
+    const { app } = setup()
+    expect((await app.request('/api/fires/grid')).status).toBe(501)
+    expect((await (await app.request('/api/channels')).json()).fires).toBe(false)
+    expect((await (await setup({}, { fires }).app.request('/api/channels')).json()).fires).toBe(true)
+  })
+
+  it('serves the grid, and single fires in a small box only', async () => {
+    const { app } = setup({}, { fires })
+    expect((await app.request('/api/fires/grid')).status).toBe(200)
+    expect((await app.request('/api/fires?bbox=130,-13,131,-12')).status).toBe(200)
+    expect(fires.inBox).toHaveBeenLastCalledWith([130, -13, 131, -12])
+    expect((await app.request('/api/fires?bbox=0,0,20,5')).status).toBe(400)
+    for (const q of ['bbox=1,2,3', 'bbox=a,b,c,d', 'bbox=0,95,1,96', 'bbox=200,0,201,1', '']) {
+      expect((await app.request(`/api/fires?${q}`)).status).toBe(400)
+    }
   })
 })

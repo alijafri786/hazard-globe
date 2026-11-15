@@ -11,6 +11,7 @@ import { getFlights } from './flights.js'
 import type { Climatology } from './climatology/index.js'
 import { isStormClass, SLICES, STORM_CLASSES } from './climatology/model.js'
 import type { Dart } from './dart.js'
+import type { Fires } from './fires.js'
 import { isGlide, type ReliefWeb } from './reliefweb.js'
 import type { TsunamiWatch } from './tsunami.js'
 import type { SpaceWeather } from './spaceWeather.js'
@@ -51,6 +52,8 @@ export interface AppDeps {
   wind: () => Promise<WindGrid | null>
   /** How often storms pass each place, from IBTrACS (see climatology/); null when it hasn't been built */
   climatology?: Climatology | null
+  /** Live fires from NASA FIRMS (see fires.ts); present when a map key is set */
+  fires?: Pick<Fires, 'grid' | 'inBox'>
   /** Tsunami messages from NOAA's warning centres (see tsunami.ts) */
   tsunami?: Pick<TsunamiWatch, 'poll' | 'recent' | 'fetchedAt'>
   /** DART tsunami buoys (see dart.ts) */
@@ -152,7 +155,13 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
 
   /** Which ways of being notified this server offers */
   app.get('/api/channels', (c) =>
-    c.json({ push: deps.pushEnabled, email: Boolean(email), telegram: telegramBot ? { bot: telegramBot } : null }),
+    c.json({
+      push: deps.pushEnabled,
+      email: Boolean(email),
+      telegram: telegramBot ? { bot: telegramBot } : null,
+      // fire alerts need a FIRMS key
+      fires: Boolean(deps.fires),
+    }),
   )
 
   app.get('/api/events', async (c) => {
@@ -299,6 +308,31 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     if (!answer) return c.json({ error: 'ReliefWeb unavailable, try again shortly' }, 503)
     c.header('Cache-Control', 'public, max-age=1800')
     return c.json(answer)
+  })
+
+  const noFires = { error: "Live fires aren't set up on this server" }
+
+  // A day's fires on a 0.25° grid: 2 MB of counts, nearly all zeros, so base64 in compressed JSON is small
+  app.get('/api/fires/grid', compress(), async (c) => {
+    if (!deps.fires) return c.json(noFires, 501)
+    const grid = await deps.fires.grid().catch(() => null)
+    if (!grid) return c.json({ error: 'FIRMS unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=600')
+    return c.json(grid)
+  })
+
+  app.get('/api/fires', rateLimit({ windowMs: MINUTE, max: 60, key: byIp, now }), compress(), async (c) => {
+    if (!deps.fires) return c.json(noFires, 501)
+    const box = (c.req.query('bbox') ?? '').split(',').map(Number)
+    const ok = box.length === 4 && box.every(Number.isFinite) && Math.abs(box[1]) <= 90 && Math.abs(box[3]) <= 90
+    if (!ok || box.some((v, i) => (i % 2 === 0 ? Math.abs(v) > 180 : false))) {
+      return c.json({ error: 'bbox must be west,south,east,north in degrees' }, 400)
+    }
+    const found = await deps.fires.inBox(box as [number, number, number, number]).catch(() => undefined)
+    if (found === undefined) return c.json({ error: 'FIRMS unavailable, try again shortly' }, 503)
+    if (found === null) return c.json({ error: 'bbox is bigger than 10° by 10°: zoom in for single fires' }, 400)
+    c.header('Cache-Control', 'public, max-age=600')
+    return c.json({ detections: found })
   })
 
   // The alert poller reads the feeds every 2 minutes; only a stale copy (or none, in tests) is read again here

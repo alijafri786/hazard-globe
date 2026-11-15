@@ -12,6 +12,7 @@ import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { createSatellites } from './satellites.js'
 import { createDart } from './dart.js'
+import { createFires } from './fires.js'
 import { createReliefWeb } from './reliefweb.js'
 import { createSourcePoller } from './sourceAlerts.js'
 import { createTsunamiWatch } from './tsunami.js'
@@ -60,6 +61,18 @@ const poller = createPoller(store, deliver)
 const tsunami = createTsunamiWatch()
 // Tsunami messages can't wait for GDACS's 15 minutes: their own poll, every 2
 const tsunamiAlerts = createSourcePoller({ name: 'tsunami', intervalMs: 2 * 60_000, items: tsunami.items, store, deliver })
+// Never in end-to-end runs: they mustn't reach FIRMS
+const fires = config.firmsMapKey && !e2e ? createFires({ mapKey: config.firmsMapKey }) : undefined
+const fireAlerts = fires
+  ? createSourcePoller({
+      name: 'fires',
+      intervalMs: 30 * 60_000,
+      // FIRMS is asked only when some area wants fire alerts
+      items: async () => fires.items((await store.list()).some((s) => s.areas.some((a) => a.hazards.includes('HS')))),
+      store,
+      deliver,
+    })
+  : undefined
 const app = createApp({
   store,
   poller,
@@ -70,6 +83,7 @@ const app = createApp({
   earthquakes: createEarthquakes(),
   climatology: await loadClimatology(),
   spaceWeather: createSpaceWeather(),
+  fires,
   // Never in end-to-end runs: they mustn't reach tsunami.gov or NDBC
   tsunami: e2e ? undefined : tsunami,
   dart: e2e ? undefined : createDart(),
@@ -95,5 +109,6 @@ serve({ fetch: app.fetch, port: config.port }, (info) => {
   if (!e2e) {
     poller.start()
     tsunamiAlerts.start()
+    fireAlerts?.start()
   }
 })
