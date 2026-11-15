@@ -106,22 +106,57 @@ test('embedded, it shows the globe and its key, with a way out to the full app',
   await expect(page.getByRole('complementary', { name: 'Map key' })).toBeVisible()
 })
 
-test('Share mid-way between 3D and 2D gives a link and no error', async ({ page }) => {
+
+const camOf = (link: string) => new URLSearchParams(new URL(link).hash.slice(1)).get('cam')
+const modeOf = (link: string) => new URLSearchParams(new URL(link).hash.slice(1)).get('mode')
+
+test('Share mid-way from 3D to 2D gives the view as it was before the change', async ({ page }) => {
   await stub(page)
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto('/')
+  // The page's clock is ours: frozen, Cesium can't move the change along, so Share lands mid-way every time
+  await page.clock.install()
+  await page.goto('/#cam=-60.0000,20.0000,9000000,0.0,-90.0')
+  await expect(page.locator('.events strong')).toHaveText(['Storm Linky'])
+  const share = page.getByRole('button', { name: 'Share' })
+  await share.click()
+  await expect(page.getByRole('button', { name: 'Link copied' })).toBeVisible()
+  const before = await page.evaluate(() => navigator.clipboard.readText())
+  expect(camOf(before)).toBe('-60.0000,20.0000,9000000,0.0,-90.0')
 
+  await page.clock.pauseAt(Date.now() + 5_000) // past the "Link copied" note, then frozen
   const picker = page.locator('.cesium-sceneModePicker-wrapper > button').first()
   await picker.click()
   await page.getByRole('button', { name: '2D', exact: true }).last().click()
-  // the camera has no heading or pitch until the change is over
-  await page.getByRole('button', { name: 'Share' }).click()
-  await expect(page.getByRole('button', { name: 'Link copied' })).toBeVisible()
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/cam=-?\d/)
+  // One second into the two-second change: the camera is mid-way between the two projections, where
+  // reading it gives a place that isn't on either
+  await page.clock.runFor(1_000)
+  await page.evaluate(() => navigator.clipboard.writeText(''))
+  await share.click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).not.toBe('')
+  const midway = await page.evaluate(() => navigator.clipboard.readText())
+  expect(camOf(midway)).toBe(camOf(before)) // not a blend of the two projections
+  expect(modeOf(midway)).toBeNull() // still the 3D view it was
 
+  // Once the change is over, the address says 2D, once, without polling through it
+  await page.clock.resume()
   await expect(picker).toHaveAttribute('title', '2D')
-  await expect.poll(() => new URL(page.url()).hash).toMatch(/cam=-?\d/)
+  // (read from the page: Playwright's page.url() lags behind replaceState while it holds the clock)
+  const hash = () => page.evaluate(() => location.href)
+  // software rendering takes a while to finish the change once the clock runs again
+  await expect.poll(async () => modeOf(await hash()), { timeout: 30_000 }).toBe('2d')
   expect(errors).toEqual([])
+})
+
+test('a link made in 2D opens in 2D, at the same width of view', async ({ page }) => {
+  await stub(page)
+  await page.goto('/#cam=-60.0000,20.0000,12000000,0.0,-90.0&mode=2d')
+  const picker = page.locator('.cesium-sceneModePicker-wrapper > button').first()
+  await expect(picker).toHaveAttribute('title', '2D')
+  // written back as it was read: the 2D width round-trips through setView
+  await page.getByRole('tab', { name: 'Flights' }).click()
+  await expect.poll(() => new URL(page.url()).hash).toContain('tab=flights')
+  expect(camOf(page.url())).toBe('-60.0000,20.0000,12000000,0.0,-90.0')
+  expect(modeOf(page.url())).toBe('2d')
 })

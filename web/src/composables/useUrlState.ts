@@ -1,6 +1,7 @@
-import { Cartesian3, Math as CesiumMath, SceneMode, type Entity, type Viewer } from 'cesium'
+import { Cartesian3, Math as CesiumMath, type Entity, type Viewer } from 'cesium'
 import { computed, nextTick, onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
 import type { LayerRegistry } from '../layers/registry'
+import { cameraView, type CameraView } from '../services/camera'
 import { isHistoryDays, type HistoryDays, type useTimeline } from './useTimeline'
 
 export const TABS = ['events', 'weather', 'flights', 'space', 'alerts'] as const
@@ -8,7 +9,8 @@ export type Tab = (typeof TABS)[number]
 
 /** What a shared link restores. Watch areas, alerts and searched places are never part of it. */
 export interface ViewState {
-  cam?: { lon: number; lat: number; height: number; heading: number; pitch: number }
+  /** where the camera is, and whether on the globe (3D), the flat map (2D) or Columbus view */
+  cam?: CameraView
   layers?: string[]
   /** a GDACS event (`TC-1001234`) or a USGS earthquake (`usgs-us7000tyek`) to select */
   event?: string
@@ -21,6 +23,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/
 const LAYER_ID = /^[a-z0-9-]{1,30}$/i
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+const VIEW_MODES = ['2d', 'cv'] as const
 
 /** Reads a fragment such as `#cam=…&layers=…`. Untrusted: anything malformed is left out, numbers clamped. */
 export function parseViewState(hash: string): ViewState {
@@ -30,10 +33,13 @@ export function parseViewState(hash: string): ViewState {
   const cam = q.get('cam')?.split(',').map(Number)
   if (cam?.length === 5 && cam.every(Number.isFinite)) {
     const [lon, lat, height, heading, pitch] = cam
+    const mode = q.get('mode')
     state.cam = {
+      mode: (VIEW_MODES as readonly (string | null)[]).includes(mode) ? (mode as CameraView['mode']) : '3d',
       lon: clamp(lon, -180, 180),
       lat: clamp(lat, -90, 90),
-      height: clamp(height, 100, 5e7),
+      // in 2D this is the width of the view, up to a few times the world's width
+      height: clamp(height, 100, 1e8),
       heading: ((heading % 360) + 360) % 360,
       pitch: clamp(pitch, -90, 0),
     }
@@ -64,8 +70,11 @@ export function parseViewState(hash: string): ViewState {
 export function formatViewState(s: ViewState): string {
   const q = new URLSearchParams()
   if (s.cam) {
-    const { lon, lat, height, heading, pitch } = s.cam
-    q.set('cam', [lon.toFixed(4), lat.toFixed(4), Math.round(height), heading.toFixed(1), pitch.toFixed(1)].join(','))
+    const { mode, lon, lat, height, heading, pitch } = s.cam
+    // Rounded before wrapping, so 359.97° is written 0.0, not 360.0
+    const h = (((Math.round(heading * 10) / 10) % 360) + 360) % 360
+    q.set('cam', [lon.toFixed(4), lat.toFixed(4), Math.round(height), h.toFixed(1), pitch.toFixed(1)].join(','))
+    if (mode !== '3d') q.set('mode', mode)
   }
   if (s.layers) q.set('layers', [...s.layers].sort().join(','))
   if (s.event) q.set('event', s.event)
@@ -87,8 +96,9 @@ function findEntity(viewer: Viewer, id: string): Entity | undefined {
 
 /**
  * Keeps the view in the address bar's fragment, so the link can be shared or bookmarked and opens
- * the same view: camera, layers, selected event, tab and History day. Read once on load, then
- * rewritten with replaceState (no history entries for every camera move) once things settle.
+ * the same view: camera and scene mode (3D, 2D or Columbus view), layers, selected event, tab and
+ * History day. Read once on load, then rewritten with replaceState (no history entries for every
+ * camera move) when the camera comes to rest or anything else changes.
  */
 export function useUrlState({
   viewer,
@@ -108,6 +118,11 @@ export function useUrlState({
   let ready = false
   let pendingEvent = initial.event
   let writeTimer: ReturnType<typeof setTimeout> | undefined
+  /**
+   * The camera as it last came to rest. Mid-way between 3D and 2D the camera names no real place, so a
+   * link made then (Share, Open in Hazard Globe, or the address bar) gives the view before the change.
+   */
+  let settled: CameraView | undefined
 
   function current(): ViewState {
     const v = viewer.value
@@ -116,15 +131,8 @@ export function useUrlState({
       tab: tab.value,
     }
     if (v) {
-      const c = v.camera.positionCartographic
-      state.cam = {
-        lon: CesiumMath.toDegrees(c.longitude),
-        lat: CesiumMath.toDegrees(c.latitude),
-        height: c.height,
-        // undefined while morphing between 3D and 2D (a Share pressed mid-way)
-        heading: CesiumMath.toDegrees(v.camera.heading ?? 0),
-        pitch: CesiumMath.toDegrees(v.camera.pitch ?? -Math.PI / 2),
-      }
+      const cam = cameraView(v) ?? settled
+      if (cam) state.cam = cam
       const selected = v.selectedEntity?.id
       if (selected && EVENT_ID.test(selected)) state.event = selected
     }
@@ -140,13 +148,17 @@ export function useUrlState({
   function write() {
     clearTimeout(writeTimer)
     if (!ready) return
-    // Mid-way between 3D and 2D the camera has no heading or pitch: try again once it's arrived
-    if (viewer.value?.scene.mode === SceneMode.MORPHING) return scheduleWrite()
     history.replaceState(history.state, '', `${location.pathname}${location.search}#${formatViewState(current())}`)
   }
   const scheduleWrite = () => {
     clearTimeout(writeTimer)
     writeTimer = setTimeout(write, 400)
+  }
+  /** The camera has come to rest: after a move, or once a change between 3D and 2D is over */
+  function onSettled() {
+    const v = viewer.value
+    settled = (v && cameraView(v)) || settled
+    scheduleWrite()
   }
 
   function trySelect() {
@@ -174,24 +186,31 @@ export function useUrlState({
       if (at >= 0) timeline.index.value = at
     }
     if (initial.cam) {
-      const { lon, lat, height, heading, pitch } = initial.cam
+      const { mode, lon, lat, height, heading, pitch } = initial.cam
+      // Into the linked mode first, at once: in 2D the height is the width of the view, read as such by setView
+      if (mode === '2d') v.scene.morphTo2D(0)
+      else if (mode === 'cv') v.scene.morphToColumbusView(0)
       v.camera.setView({
         destination: Cartesian3.fromDegrees(lon, lat, height),
         orientation: { heading: CesiumMath.toRadians(heading), pitch: CesiumMath.toRadians(pitch), roll: 0 },
       })
     }
     trySelect()
+    settled = cameraView(v)
     ready = true
   }
 
   let removeCameraListener: (() => void) | undefined
+  let removeMorphListener: (() => void) | undefined
   let removeSelectionListener: (() => void) | undefined
   watch(
     viewer,
     (v) => {
       if (!v) return
       void apply(v)
-      removeCameraListener = v.camera.moveEnd.addEventListener(scheduleWrite)
+      removeCameraListener = v.camera.moveEnd.addEventListener(onSettled)
+      // One write when a change between 3D and 2D is over, rather than polling through it
+      removeMorphListener = v.scene.morphComplete.addEventListener(onSettled)
       removeSelectionListener = v.selectedEntityChanged.addEventListener(scheduleWrite)
     },
     { immediate: true },
@@ -205,6 +224,7 @@ export function useUrlState({
   onBeforeUnmount(() => {
     clearTimeout(writeTimer)
     removeCameraListener?.()
+    removeMorphListener?.()
     removeSelectionListener?.()
   })
 
