@@ -1,5 +1,7 @@
 import {
   buildModuleUrl,
+  Cartesian3,
+  type Camera,
   ImageryLayer,
   Ion,
   IonImageryProvider,
@@ -10,6 +12,20 @@ import {
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { onBeforeUnmount, onMounted, shallowRef, type Ref } from 'vue'
 import { CoordinateGeocoderService, LazyIonGeocoderService, NominatimGeocoderService } from '../services/geocoders'
+
+/**
+ * Cesium's zoom-to-cursor turns the camera about the axis between the point under the cursor and the one
+ * under the screen's centre. Looking straight down with the cursor on the centre pixel, those can be the
+ * same point while rounding still lets the turn through with a zero axis, and Cesium stops rendering
+ * ("normalized result is not a number"). Seen with world terrain on. A turn about no axis does nothing,
+ * so it's skipped.
+ */
+function guardZeroAxisRotation(camera: Camera) {
+  const rotate = camera.rotate.bind(camera)
+  camera.rotate = (axis: Cartesian3, angle?: number) => {
+    if (Cartesian3.magnitudeSquared(axis) > 0 && Number.isFinite(angle ?? 0)) rotate(axis, angle)
+  }
+}
 
 /**
  * Creates a Cesium Viewer that works with NO Cesium ion token (bundled Natural Earth imagery),
@@ -52,6 +68,8 @@ export function useViewer(container: Ref<HTMLElement | null>) {
 
     // Nominatim can't search as you type, and Cesium drops a search's credits whenever it tries to
     if (!token) viewer.value.geocoder.viewModel.autoComplete = false
+
+    guardZeroAxisRotation(viewer.value.camera)
 
     const scene = viewer.value.scene
     scene.globe.enableLighting = false
