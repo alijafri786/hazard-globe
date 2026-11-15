@@ -503,3 +503,65 @@ describe('GET /api/earthquakes', () => {
     expect((await setup().app.request('/api/earthquakes')).status).toBe(503)
   })
 })
+
+describe('storm climatology routes', () => {
+  const near = vi.fn<NonNullable<NonNullable<AppDeps['climatology']>>['near']>((lon, lat, radiusKm) => ({
+    from: '1980-01-02',
+    to: '2026-11-12',
+    years: 46.86,
+    radiusKm,
+    storms: 3,
+    hurricane: 1,
+    major: 0,
+    peakMonths: [9],
+    strongest: { name: 'ALPHA', year: 2004, kt: 90 },
+  }))
+  const climatology: NonNullable<AppDeps['climatology']> = {
+    meta: {
+      source: 'test',
+      citation: 'test',
+      from: '1980-01-02',
+      to: '2026-11-12',
+      years: 46.86,
+      storms: 3,
+      reachKm: 100,
+      classes: { all: 34, hurricane: 64, major: 96 },
+      built: '2026-11-15T00:00:00.000Z',
+      grids: [{ res: 0.5, cols: 720, rows: 360 }, { res: 1, cols: 360, rows: 180 }],
+    },
+    grid: (cls, slice) => Buffer.from(new Uint16Array(slice === 0 ? 720 * 360 : 360 * 180).fill(cls === 'all' ? 7 : 1).buffer),
+    near,
+  }
+
+  it('serves the description, and says when there is nothing built', async () => {
+    expect(await (await setup({}, { climatology }).app.request('/api/climatology')).json()).toMatchObject({ years: 46.86 })
+    expect((await setup().app.request('/api/climatology')).status).toBe(503)
+    expect((await setup().app.request('/api/climatology/grid')).status).toBe(503)
+  })
+
+  it('serves a grid as compressed bytes, cacheable and revalidated by ETag', async () => {
+    const { app } = setup({}, { climatology })
+    const res = await app.request('/api/climatology/grid?class=all&month=0', { headers: { 'Accept-Encoding': 'gzip' } })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('application/octet-stream')
+    expect(res.headers.get('Content-Encoding')).toBe('gzip')
+    const etag = res.headers.get('ETag')!
+    expect((await app.request('/api/climatology/grid?class=all&month=0', { headers: { 'If-None-Match': etag } })).status).toBe(304)
+
+    const month = await app.request('/api/climatology/grid?class=major&month=9')
+    expect(new Uint16Array(await month.arrayBuffer())).toHaveLength(360 * 180)
+    for (const q of ['class=minor', 'month=13', 'month=-1', 'month=1.5', 'class=toString']) {
+      expect((await app.request(`/api/climatology/grid?${q}`)).status).toBe(400)
+    }
+  })
+
+  it('answers for a place, checking what it is asked', async () => {
+    const { app } = setup({}, { climatology })
+    const res = await app.request('/api/climatology/near?lon=-80.2&lat=25.8&radiusKm=150')
+    expect(await res.json()).toMatchObject({ storms: 3, radiusKm: 150 })
+    expect(near).toHaveBeenLastCalledWith(-80.2, 25.8, 150)
+    for (const q of ['lon=200&lat=0&radiusKm=100', 'lon=0&lat=0&radiusKm=2000', 'lon=0&lat=0', 'lon=x&lat=0&radiusKm=100']) {
+      expect((await app.request(`/api/climatology/near?${q}`)).status).toBe(400)
+    }
+  })
+})

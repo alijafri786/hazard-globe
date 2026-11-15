@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { compress } from 'hono/compress'
@@ -7,6 +8,8 @@ import { config } from './config.js'
 import { anySent, type Deliver } from './delivery.js'
 import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
+import type { Climatology } from './climatology/index.js'
+import { isStormClass, SLICES, STORM_CLASSES } from './climatology/model.js'
 import { isQuakeFeed, QUAKE_FEEDS, type QuakeFeed, type QuakesSnapshot } from './earthquakes.js'
 import { fetchGeometryCollection } from './gdacs.js'
 import { isHazardType } from './hazards.js'
@@ -42,6 +45,8 @@ export interface AppDeps {
   flightTrack: (icao24: string) => Promise<FlightTrack | null>
   /** Wind for the animation (see weather/wind.ts) */
   wind: () => Promise<WindGrid | null>
+  /** How often storms pass each place, from IBTrACS (see climatology/); null when it hasn't been built */
+  climatology?: Climatology | null
   /** USGS earthquakes by feed (see earthquakes.ts) */
   earthquakes?: (feed: QuakeFeed) => Promise<QuakesSnapshot | null>
   /** Present when ships are set up (an AISStream key) */
@@ -219,6 +224,52 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     if (!Number.isInteger(mmsi) || mmsi <= 0 || mmsi > 999_999_999) return c.json({ error: 'bad MMSI' }, 400)
     const ship = deps.ships.details(mmsi)
     return ship ? c.json(ship) : c.json({ error: 'No recent report from this ship' }, 404)
+  })
+
+  const noClimatology = { error: 'Storm climatology has not been built on this server' }
+
+  app.get('/api/climatology', (c) => {
+    if (!deps.climatology) return c.json(noClimatology, 503)
+    c.header('Cache-Control', 'public, max-age=3600')
+    return c.json(deps.climatology.meta)
+  })
+
+  // A 0.5° whole-year grid is ~500 KB of mostly zeros, ~10 KB gzipped. compress() leaves binary alone, so
+  // each grid is gzipped here, once, and kept (39 grids in all, a few hundred KB)
+  const gzippedGrids = new Map<string, Buffer>()
+  app.get('/api/climatology/grid', (c) => {
+    if (!deps.climatology) return c.json(noClimatology, 503)
+    const cls = c.req.query('class') ?? 'all'
+    const month = Number(c.req.query('month') ?? 0)
+    if (!isStormClass(cls)) return c.json({ error: `class must be one of ${STORM_CLASSES.join(', ')}` }, 400)
+    if (!Number.isInteger(month) || month < 0 || month >= SLICES) return c.json({ error: 'month must be 0 (all year) to 12' }, 400)
+    const grid = deps.climatology.grid(cls, month)!
+    const etag = `"${deps.climatology.meta.built}-${cls}-${month}"`
+    if (c.req.header('If-None-Match') === etag) return c.body(null, 304)
+    c.header('ETag', etag)
+    c.header('Cache-Control', 'public, max-age=86400')
+    c.header('Content-Type', 'application/octet-stream')
+    c.header('Vary', 'Accept-Encoding')
+    if (!/\bgzip\b/.test(c.req.header('Accept-Encoding') ?? '')) return c.body(new Uint8Array(grid))
+    const key = `${cls}:${month}`
+    let gz = gzippedGrids.get(key)
+    if (!gz) gzippedGrids.set(key, (gz = gzipSync(grid)))
+    c.header('Content-Encoding', 'gzip')
+    return c.body(new Uint8Array(gz))
+  })
+
+  // Scans ~300,000 track points: cheap, but not free
+  app.get('/api/climatology/near', rateLimit({ windowMs: MINUTE, max: 60, key: byIp, now }), (c) => {
+    if (!deps.climatology) return c.json(noClimatology, 503)
+    const lon = Number(c.req.query('lon'))
+    const lat = Number(c.req.query('lat'))
+    const radiusKm = Number(c.req.query('radiusKm'))
+    const ok = (v: number, min: number, max: number) => Number.isFinite(v) && v >= min && v <= max
+    if (!ok(lon, -180, 180) || !ok(lat, -90, 90) || !ok(radiusKm, 5, 1000)) {
+      return c.json({ error: 'lon, lat and radiusKm (5–1000) are required' }, 400)
+    }
+    c.header('Cache-Control', 'public, max-age=3600')
+    return c.json(deps.climatology.near(lon, lat, radiusKm))
   })
 
   // ~100 quakes a week at M4.5+, a few hundred a day at M2.5+: tens of KB before compression

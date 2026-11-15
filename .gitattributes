@@ -2,3 +2,6 @@
 
 # Test fixtures: GRIB2 weather files
 *.grb2 binary
+
+# Built data: gzipped binary grids
+*.gz binary

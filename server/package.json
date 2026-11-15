@@ -12,7 +12,8 @@
     "vapid": "web-push generate-vapid-keys",
     "test": "vitest run",
     "test:watch": "vitest",
-    "store:import": "tsx src/store/import-cli.ts"
+    "store:import": "tsx src/store/import-cli.ts",
+    "climatology": "tsx src/climatology/build-cli.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
