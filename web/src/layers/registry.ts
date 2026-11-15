@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, type WritableComputedRef } from 'vue'
+import type { useClimatologyLayer } from '../composables/useClimatologyLayer'
 import type { useCloudLayer } from '../composables/useCloudLayer'
 import { DEPTH_BANDS, type useEarthquakeLayer } from '../composables/useEarthquakeLayer'
 import { ALTITUDE_BANDS, type useFlightLayer } from '../composables/useFlightLayer'
@@ -9,6 +10,7 @@ import { SHIP_KINDS, type useShipLayer } from '../composables/useShipLayer'
 import type { useTimeline } from '../composables/useTimeline'
 import { WIND_SCALE, type useWindLayer } from '../composables/useWindLayer'
 import { HAZARD_TYPES, HAZARDS, hazardSymbol } from '../hazards'
+import { SEQUENTIAL } from '../services/ramps'
 import { ALERT_COLOURS } from '../types'
 
 export type LayerGroup = 'Events' | 'Weather' | 'Flights' | 'Sea & space'
@@ -39,6 +41,7 @@ export interface LayerDeps {
   hazards: ReturnType<typeof useHazardLayer>
   forecast: ReturnType<typeof useFloodForecastLayer>
   quakes: ReturnType<typeof useEarthquakeLayer>
+  climatology: ReturnType<typeof useClimatologyLayer>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
   flights: ReturnType<typeof useFlightLayer>
@@ -80,6 +83,16 @@ export function createLayerRegistry(d: LayerDeps) {
         (on) => (d.quakes.enabled.value = on),
       ),
       liveOnly: true,
+    },
+    {
+      id: 'climatology',
+      label: 'Storm climatology',
+      group: 'Events',
+      on: toggle(
+        () => d.climatology.enabled.value,
+        (on) => (d.climatology.enabled.value = on),
+      ),
+      liveOnly: false, // about past decades, so as true of a past day as of today
     },
     ...(Object.keys(FORECAST_LAYERS) as (keyof typeof FORECAST_LAYERS)[]).map(
       (k): LayerEntry => ({
@@ -169,6 +182,15 @@ export function createLayerRegistry(d: LayerDeps) {
       out.push({
         title: 'GDACS alert level',
         swatches: (Object.entries(ALERT_COLOURS) as [string, string][]).map(([level, colour]) => ({ colour, label: level })),
+      })
+    }
+    const scale = d.climatology.scale.value
+    if (showing('climatology') && scale) {
+      const fmt = (n: number) => (n < 1 ? n.toFixed(1) : String(Math.round(n)))
+      out.push({
+        title: `Storms a decade within ${d.climatology.info.value?.reachKm ?? 100} km`,
+        gradient: SEQUENTIAL,
+        ends: [fmt(scale.min), `${fmt(scale.max)}+`],
       })
     }
     if (showing('usgs-quakes')) {

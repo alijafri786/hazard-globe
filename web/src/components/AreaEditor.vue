@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { useWatchAreas } from '../composables/useWatchAreas'
 import { HAZARD_TYPES, HAZARDS } from '../hazards'
+import AreaStormHistory from './AreaStormHistory.vue'
 
 const props = defineProps<{ watch: ReturnType<typeof useWatchAreas>; busy: boolean }>()
 const emit = defineEmits<{ save: []; locate: [] }>()
@@ -31,6 +32,7 @@ const hasCentre = computed(() => draft.value?.lon !== undefined && draft.value?.
     <label class="field">
       Radius: {{ draft.radiusKm }} km
       <input v-model.number="draft.radiusKm" type="range" min="25" max="500" step="25" />
+      <AreaStormHistory v-if="draft.hazards.includes('TC')" :lon="draft.lon" :lat="draft.lat" :radius-km="draft.radiusKm" />
     </label>
 
     <fieldset class="row">

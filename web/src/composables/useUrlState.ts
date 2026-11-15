@@ -2,7 +2,7 @@ import { Cartesian3, Math as CesiumMath, type Entity, type Viewer } from 'cesium
 import { computed, nextTick, onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
 import type { LayerRegistry } from '../layers/registry'
 import { cameraView, type CameraView } from '../services/camera'
-import type { QuakeFeed } from '../types'
+import type { QuakeFeed, StormClass } from '../types'
 import { SATELLITE_GROUPS, type SatelliteGroup } from './useSatelliteLayer'
 import { isHistoryDays, type HistoryDays, type useTimeline } from './useTimeline'
 
@@ -22,7 +22,11 @@ export interface ViewState {
   quakes?: QuakeFeed
   /** which satellite groups are on */
   sats?: SatelliteGroup[]
+  /** the storm climatology's strength and month (0 the whole year), when not the default (all, 0) */
+  clim?: { stormClass: StormClass; month: number }
 }
+
+const STORM_CLASSES: readonly string[] = ['all', 'hurricane', 'major']
 
 const EVENT_ID = /^((TC|FL|EQ|VO|WF|DR)-\d{1,10}|usgs-[a-z0-9]{1,20})$/
 const DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -68,6 +72,11 @@ export function parseViewState(hash: string): ViewState {
   const quakes = q.get('quakes')
   if (quakes === 'day' || quakes === 'week') state.quakes = quakes
 
+  const [cls, m] = q.get('clim')?.split(':') ?? []
+  if (cls && STORM_CLASSES.includes(cls) && /^\d{1,2}$/.test(m ?? '') && Number(m) <= 12) {
+    state.clim = { stormClass: cls as StormClass, month: Number(m) }
+  }
+
   const sats = q.get('sats')?.split(',').filter((g): g is SatelliteGroup => Object.hasOwn(SATELLITE_GROUPS, g))
   if (sats?.length) state.sats = sats
 
@@ -97,6 +106,7 @@ export function formatViewState(s: ViewState): string {
   if (s.history) q.set('history', `${s.history.days}:${s.history.day}`)
   if (s.quakes) q.set('quakes', s.quakes)
   if (s.sats) q.set('sats', [...s.sats].sort(byId).join(','))
+  if (s.clim) q.set('clim', `${s.clim.stormClass}:${s.clim.month}`)
   // commas are safe in a fragment and much easier to read than %2C
   return q.toString().replaceAll('%2C', ',').replaceAll('%3A', ':')
 }
@@ -125,6 +135,7 @@ export function useUrlState({
   loaded,
   quakeFeed,
   satelliteGroups,
+  climatology,
 }: {
   viewer: ShallowRef<Viewer | null>
   layers: LayerRegistry
@@ -134,6 +145,8 @@ export function useUrlState({
   quakeFeed: Ref<QuakeFeed>
   /** which satellite groups are on, which the layer list's one switch doesn't say */
   satelliteGroups: Ref<Record<SatelliteGroup, boolean>>
+  /** the storm climatology's choices, which the layer list's switch doesn't say */
+  climatology: { stormClass: Ref<StormClass>; month: Ref<number> }
   /** changes whenever events or quakes arrive, so a linked event can be selected once it exists */
   loaded: Readonly<Ref<unknown>>
 }) {
@@ -164,6 +177,10 @@ export function useUrlState({
     if (on('usgs-quakes') && quakeFeed.value !== 'day') state.quakes = quakeFeed.value
     const sats = (Object.keys(SATELLITE_GROUPS) as SatelliteGroup[]).filter((g) => satelliteGroups.value[g])
     if (sats.length) state.sats = sats
+    const { stormClass, month } = climatology
+    if (on('climatology') && (stormClass.value !== 'all' || month.value !== 0)) {
+      state.clim = { stormClass: stormClass.value, month: month.value }
+    }
     return state
   }
 
@@ -200,6 +217,11 @@ export function useUrlState({
   async function apply(v: Viewer) {
     // The feed before the layer goes on, so it loads the linked feed and not the default first
     if (initial.quakes) quakeFeed.value = initial.quakes
+    // likewise the storm climatology's strength and month
+    if (initial.clim) {
+      climatology.stormClass.value = initial.clim.stormClass
+      climatology.month.value = initial.clim.month
+    }
     // Only a list naming at least one real layer (or none at all, deliberately) changes what's on
     const known = initial.layers?.filter((id) => layers.entries.some((e) => e.id === id))
     if (initial.layers && (known!.length || !initial.layers.length)) {
@@ -255,7 +277,10 @@ export function useUrlState({
   )
 
   const layerState = computed(() => layers.entries.map((e) => e.on.value).join())
-  watch([layerState, tab, timeline.mode, timeline.days, timeline.index, quakeFeed], scheduleWrite)
+  watch(
+    [layerState, tab, timeline.mode, timeline.days, timeline.index, quakeFeed, climatology.stormClass, climatology.month],
+    scheduleWrite,
+  )
   watch(satelliteGroups, scheduleWrite, { deep: true })
   // A linked event can only be selected once it has loaded
   watch(loaded, () => pendingEvent && trySelect())

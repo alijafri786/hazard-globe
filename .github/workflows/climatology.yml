@@ -1,0 +1,46 @@
+name: Rebuild storm climatology
+
+# Once a year, after the northern hemisphere's season is in NOAA's IBTrACS, rebuild the storm climatology
+# and open a pull request if it changed. Needs "Allow GitHub Actions to create and approve pull requests"
+# (Settings → Actions → General). A pull request opened with the workflow's own token doesn't start CI:
+# close and reopen it, or push to its branch, to run the checks.
+on:
+  schedule:
+    - cron: '0 6 15 1 *' # 15 January, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Downloads the since-1980 CSV (~145 MB) and writes server/assets/climatology/
+      - run: npm run climatology --workspace server
+      - name: Open a pull request if the data changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # meta.json always changes (its build time); the grids and tracks only with new storms
+          if git diff --quiet -- server/assets/climatology/grids.bin.gz server/assets/climatology/tracks.bin.gz; then
+            echo "No new storms since the last build"
+            exit 0
+          fi
+          branch="climatology-$(date -u +%Y-%m-%d)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898237+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add server/assets/climatology
+          git commit -m "Rebuild the storm climatology from IBTrACS"
+          git push -u origin "$branch"
+          gh pr create --title "Rebuild the storm climatology ($(date -u +%Y))" \
+            --body "Rebuilt from NOAA's IBTrACS since-1980 file by the yearly workflow. See server/assets/climatology/meta.json for the period and storm count."

@@ -1,5 +1,8 @@
 import type {
   ChannelView,
+  ClimatologyInfo,
+  PlaceClimatology,
+  StormClass,
   EventsResponse,
   FlightsResponse,
   FlightTrack,
@@ -60,6 +63,18 @@ export const api = {
   wind: () => request<WindGrid>('/api/weather/wind'),
 
   ship: (mmsi: number) => request<ShipDetails>(`/api/ships/${mmsi}`),
+
+  climatology: () => request<ClimatologyInfo>('/api/climatology'),
+
+  /** Storms per cell over the whole period: Uint16, row-major from the north-west */
+  climatologyGrid: async (cls: StormClass, month: number) => {
+    const res = await fetch(`${BASE}/api/climatology/grid?class=${cls}&month=${month}`)
+    if (!res.ok) throw new ApiError(`Storm climatology unavailable (${res.status})`, res.status)
+    return new Uint16Array(await res.arrayBuffer())
+  },
+
+  climatologyNear: (lon: number, lat: number, radiusKm: number) =>
+    request<PlaceClimatology>(`/api/climatology/near?lon=${lon}&lat=${lat}&radiusKm=${radiusKm}`),
 
   earthquakes: (feed: QuakeFeed) => request<QuakesResponse>(`/api/earthquakes?feed=${feed}`),
 
