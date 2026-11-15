@@ -3,25 +3,43 @@
  * is one switch in the layer list; colours and values for the key are sampled from GIBS's own colour maps
  * (gibs.earthdata.nasa.gov/colormaps/v1.3/), so the key matches the tiles without fetching anything.
  */
-export const GIBS_IDS = ['rain', 'aod', 'sst', 'sstAnomaly', 'seaIce'] as const
+export const GIBS_IDS = ['fires', 'rain', 'aod', 'sst', 'sstAnomaly', 'seaIce'] as const
 export type GibsId = (typeof GIBS_IDS)[number]
 
 export interface GibsLayerInfo {
   label: string
   /** the tab whose controls show it */
-  tab: 'weather' | 'space'
+  tab: 'events' | 'weather' | 'space'
+  /**
+   * How GIBS serves it: map tiles (WMTS), or images it draws on request (WMS). Its fire detections exist
+   * only as vector tiles, which Cesium can't draw; WMS draws them as dots.
+   */
+  service?: 'wms'
   /** sea overlays cover the same water, so only one shows at a time */
   sea: boolean
   layer: string
   tileMatrixSet: string
   /** deepest zoom GIBS serves it at; tiles beyond are magnified (IMERG is ~10 km, MUR ~1 km) */
   maximumLevel: number
+  /** a gradient of values; or a single colour for marks that are all alike (ends left empty) */
   legend: { title: string; colours: readonly string[]; ends: string[] }
   /** one line on what it is, for the controls */
   about: string
 }
 
 export const GIBS: Record<GibsId, GibsLayerInfo> = {
+  fires: {
+    label: 'Fires seen from space',
+    tab: 'events',
+    sea: false,
+    service: 'wms',
+    layer: 'VIIRS_NOAA20_Thermal_Anomalies_375m_All',
+    tileMatrixSet: 'GoogleMapsCompatible_Level8',
+    maximumLevel: 9,
+    legend: { title: 'Fire seen by satellite that day', colours: ['#ef2b2b'], ends: [] },
+    about:
+      'Each dot is a hot spot the VIIRS instrument on NOAA-20 saw that day, about 375 m across: mostly fires, now and then a flare or a volcano.',
+  },
   rain: {
     label: 'Rainfall (NASA IMERG)',
     tab: 'weather',

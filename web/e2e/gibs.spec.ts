@@ -81,3 +81,25 @@ test('says so when NASA has nothing for a day or the two before it', async ({ pa
   await page.goto(`/#tab=space&layers=gibs-sst&history=30:${isoDay(day)}`)
   await expect(page.getByText('NASA has no map for this day or the two before it.')).toBeVisible()
 })
+
+test('fires come as images NASA draws, from the newest day it has', async ({ page }) => {
+  await stubHazardData(page)
+  const yesterday = isoDay(today - DAY)
+  const times: string[] = []
+  // WMS answers a day it lacks with an XML error, status 200: today it lacks
+  await page.route('https://gibs.earthdata.nasa.gov/wms/**', (r) => {
+    const q = new URL(r.request().url()).searchParams
+    const time = q.get('TIME') ?? q.get('time') ?? ''
+    times.push(time)
+    if (time === isoDay(today)) return r.fulfill({ body: '<ServiceExceptionReport/>', contentType: 'text/xml', headers: CORS })
+    return r.fulfill({ body: PNG, contentType: 'image/png', headers: CORS })
+  })
+  await page.goto('/')
+  await page.getByLabel('Fires seen from space').check()
+  await expect(page.getByRole('status').filter({ hasText: 'Fires seen from space:' })).toHaveText(
+    `Fires seen from space: ${formatDay(today - DAY)}`,
+  )
+  await expect(page.locator('.gibs .swatch')).toHaveText('Fire seen by satellite that day')
+  await expect.poll(() => times.filter((t) => t === yesterday).length).toBeGreaterThan(1) // the check, then the tiles
+  expect(times).not.toContain(isoDay(today - 2 * DAY))
+})

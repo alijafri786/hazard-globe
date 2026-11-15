@@ -170,7 +170,7 @@ watch(search.found, (place) => {
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" :gibs="gibs" />
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"

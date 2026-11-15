@@ -125,7 +125,7 @@ export function createLayerRegistry(d: LayerDeps) {
       (id): LayerEntry => ({
         id: `gibs-${id}`,
         label: GIBS[id].label,
-        group: GIBS[id].tab === 'weather' ? 'Weather' : 'Sea & space',
+        group: ({ events: 'Events', weather: 'Weather', space: 'Sea & space' } as const)[GIBS[id].tab],
         on: toggle(
           () => d.gibs.on.value[id],
           (on) => (d.gibs.on.value[id] = on),
@@ -227,7 +227,9 @@ export function createLayerRegistry(d: LayerDeps) {
       out.push({ title: 'Flood forecast (GloFAS)', swatches: FLOOD_LEVELS.map((l) => ({ ...l })) })
     }
     for (const id of GIBS_IDS) {
-      if (showing(`gibs-${id}`)) out.push({ title: GIBS[id].legend.title, gradient: GIBS[id].legend.colours, ends: GIBS[id].legend.ends })
+      if (!showing(`gibs-${id}`)) continue
+      const { title, colours, ends } = GIBS[id].legend
+      out.push(ends.length ? { title, gradient: colours, ends } : { title: 'NASA', swatches: [{ colour: colours[0], label: title }] })
     }
     if (showing('aurora')) {
       out.push({ title: 'Aurora, % chance overhead', gradient: AURORA_COLOURS, ends: [`${AURORA_MIN}`, `${AURORA_MAX}+`] })
