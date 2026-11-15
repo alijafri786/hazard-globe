@@ -105,3 +105,23 @@ test('embedded, it shows the globe and its key, with a way out to the full app',
   await expect(page.getByText('Hazard Globe', { exact: true })).toHaveCount(0) // no side panel
   await expect(page.getByRole('complementary', { name: 'Map key' })).toBeVisible()
 })
+
+test('Share mid-way between 3D and 2D gives a link and no error', async ({ page }) => {
+  await stub(page)
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+
+  const picker = page.locator('.cesium-sceneModePicker-wrapper > button').first()
+  await picker.click()
+  await page.getByRole('button', { name: '2D', exact: true }).last().click()
+  // the camera has no heading or pitch until the change is over
+  await page.getByRole('button', { name: 'Share' }).click()
+  await expect(page.getByRole('button', { name: 'Link copied' })).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/cam=-?\d/)
+
+  await expect(picker).toHaveAttribute('title', '2D')
+  await expect.poll(() => new URL(page.url()).hash).toMatch(/cam=-?\d/)
+  expect(errors).toEqual([])
+})

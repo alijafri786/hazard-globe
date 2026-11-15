@@ -1,4 +1,4 @@
-import { Cartesian3, Math as CesiumMath, type Entity, type Viewer } from 'cesium'
+import { Cartesian3, Math as CesiumMath, SceneMode, type Entity, type Viewer } from 'cesium'
 import { computed, nextTick, onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
 import type { LayerRegistry } from '../layers/registry'
 import { isHistoryDays, type HistoryDays, type useTimeline } from './useTimeline'
@@ -121,8 +121,9 @@ export function useUrlState({
         lon: CesiumMath.toDegrees(c.longitude),
         lat: CesiumMath.toDegrees(c.latitude),
         height: c.height,
-        heading: CesiumMath.toDegrees(v.camera.heading),
-        pitch: CesiumMath.toDegrees(v.camera.pitch),
+        // undefined while morphing between 3D and 2D (a Share pressed mid-way)
+        heading: CesiumMath.toDegrees(v.camera.heading ?? 0),
+        pitch: CesiumMath.toDegrees(v.camera.pitch ?? -Math.PI / 2),
       }
       const selected = v.selectedEntity?.id
       if (selected && EVENT_ID.test(selected)) state.event = selected
@@ -139,6 +140,8 @@ export function useUrlState({
   function write() {
     clearTimeout(writeTimer)
     if (!ready) return
+    // Mid-way between 3D and 2D the camera has no heading or pitch: try again once it's arrived
+    if (viewer.value?.scene.mode === SceneMode.MORPHING) return scheduleWrite()
     history.replaceState(history.state, '', `${location.pathname}${location.search}#${formatViewState(current())}`)
   }
   const scheduleWrite = () => {
