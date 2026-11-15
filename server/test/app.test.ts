@@ -617,3 +617,48 @@ describe('GET /api/reports', () => {
     expect((await setup({}, { reliefweb }).app.request('/api/reports?type=EQ&iso3=VUT&date=2026-10-08')).status).toBe(503)
   })
 })
+
+describe('tsunami and DART routes', () => {
+  const message = {
+    id: 'urn:uuid:1',
+    centre: 'PTWC' as const,
+    event: 'PHEB-1',
+    type: 'warning' as const,
+    issuedAt: '2026-11-15T10:00:00.000Z',
+    region: 'Somewhere',
+    lat: 0,
+    lon: 0,
+    magnitude: 7.8,
+    url: 'https://www.tsunami.gov/events/x',
+  }
+
+  it('reads the feeds again only when its copy is stale', async () => {
+    let fetchedAt: string | null = null
+    const tsunami = {
+      poll: vi.fn(async () => ((fetchedAt = new Date(Date.parse('2026-11-15T12:00:00Z')).toISOString()), [message])),
+      recent: () => [message],
+      fetchedAt: () => fetchedAt,
+    }
+    let t = Date.parse('2026-11-15T12:00:00Z')
+    const { app } = setup({ now: () => t }, { tsunami })
+    expect(await (await app.request('/api/tsunami')).json()).toMatchObject({ messages: [{ type: 'warning' }] })
+    t += 2 * 60_000
+    await app.request('/api/tsunami')
+    expect(tsunami.poll).toHaveBeenCalledOnce()
+    t += 2 * 60_000
+    await app.request('/api/tsunami')
+    expect(tsunami.poll).toHaveBeenCalledTimes(2)
+  })
+
+  it('serves the buoys and a buoy’s readings, checking its id', async () => {
+    const dart = {
+      stations: async () => [{ id: '21415', name: 'Attu', lat: 50, lon: 171 }],
+      readings: vi.fn(async (id: string) => (id === '21415' ? { id, readings: [], eventMode: false } : null)),
+    }
+    const { app } = setup({}, { dart })
+    expect((await (await app.request('/api/dart')).json()).stations).toHaveLength(1)
+    expect((await app.request('/api/dart/21415')).status).toBe(200)
+    expect((await app.request('/api/dart/99999')).status).toBe(404)
+    expect((await app.request('/api/dart/..%2Fetc')).status).toBe(400)
+  })
+})

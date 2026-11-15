@@ -10,7 +10,9 @@ import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
 import type { Climatology } from './climatology/index.js'
 import { isStormClass, SLICES, STORM_CLASSES } from './climatology/model.js'
+import type { Dart } from './dart.js'
 import { isGlide, type ReliefWeb } from './reliefweb.js'
+import type { TsunamiWatch } from './tsunami.js'
 import type { SpaceWeather } from './spaceWeather.js'
 import { isQuakeFeed, QUAKE_FEEDS, type QuakeFeed, type QuakesSnapshot } from './earthquakes.js'
 import { fetchGeometryCollection } from './gdacs.js'
@@ -49,6 +51,10 @@ export interface AppDeps {
   wind: () => Promise<WindGrid | null>
   /** How often storms pass each place, from IBTrACS (see climatology/); null when it hasn't been built */
   climatology?: Climatology | null
+  /** Tsunami messages from NOAA's warning centres (see tsunami.ts) */
+  tsunami?: Pick<TsunamiWatch, 'poll' | 'recent' | 'fetchedAt'>
+  /** DART tsunami buoys (see dart.ts) */
+  dart?: Pick<Dart, 'stations' | 'readings'>
   /** ReliefWeb reports for an event (see reliefweb.ts); present when an app name is set */
   reliefweb?: ReliefWeb
   /** Aurora forecast and the Kp index from NOAA SWPC (see spaceWeather.ts) */
@@ -293,6 +299,33 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     if (!answer) return c.json({ error: 'ReliefWeb unavailable, try again shortly' }, 503)
     c.header('Cache-Control', 'public, max-age=1800')
     return c.json(answer)
+  })
+
+  // The alert poller reads the feeds every 2 minutes; only a stale copy (or none, in tests) is read again here
+  app.get('/api/tsunami', async (c) => {
+    const t = deps.tsunami
+    if (!t) return c.json({ error: 'Tsunami messages unavailable' }, 503)
+    const at = t.fetchedAt()
+    if (!at || now() - Date.parse(at) > 3 * MINUTE) await t.poll().catch(() => null)
+    if (!t.fetchedAt()) return c.json({ error: 'tsunami.gov unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=60')
+    return c.json({ fetchedAt: t.fetchedAt(), messages: t.recent() })
+  })
+
+  app.get('/api/dart', compress(), async (c) => {
+    const stations = await deps.dart?.stations().catch(() => null)
+    if (!stations) return c.json({ error: 'DART buoys unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=3600')
+    return c.json({ stations })
+  })
+
+  app.get('/api/dart/:id', rateLimit({ windowMs: MINUTE, max: 60, key: byIp, now }), compress(), async (c) => {
+    const id = c.req.param('id')
+    if (!/^[A-Za-z0-9]{3,8}$/.test(id)) return c.json({ error: 'bad buoy id' }, 400)
+    const readings = await deps.dart?.readings(id).catch(() => null)
+    if (!readings) return c.json({ error: 'No readings for that buoy' }, 404)
+    c.header('Cache-Control', 'public, max-age=300')
+    return c.json(readings)
   })
 
   const noSpaceWeather = { error: 'Space weather unavailable, try again shortly' }

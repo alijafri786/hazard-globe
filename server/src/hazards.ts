@@ -7,8 +7,20 @@ export type HazardType = (typeof HAZARD_TYPES)[number]
 
 export const isHazardType = (v: unknown): v is HazardType => (HAZARD_TYPES as readonly unknown[]).includes(v)
 
+/**
+ * Alerts that don't come from GDACS: tsunami messages from NOAA's warning centres, and clusters of fire
+ * detections from NASA FIRMS. A watch area can choose them like any hazard; GDACS is never asked for them.
+ */
+export const EXTRA_HAZARDS = ['TS', 'HS'] as const
+export type ExtraHazard = (typeof EXTRA_HAZARDS)[number]
+
+/** Everything a watch area can ask to be alerted about, in the order it's offered */
+export const ALERT_HAZARDS = [...HAZARD_TYPES, ...EXTRA_HAZARDS] as const
+export type AlertHazard = (typeof ALERT_HAZARDS)[number]
+export const isAlertHazard = (v: unknown): v is AlertHazard => (ALERT_HAZARDS as readonly unknown[]).includes(v)
+
 /** What a watch area is sent when it doesn't choose: what every area was sent before more types existed. */
-export const DEFAULT_HAZARDS: HazardType[] = ['TC', 'FL']
+export const DEFAULT_HAZARDS: AlertHazard[] = ['TC', 'FL']
 
 /** A feature of a GDACS geometry collection; trim() can leave one with no geometry, keeping its properties */
 type Feature = Omit<GdacsCollection['features'][number], 'geometry'> & { geometry: Geometry | null }

@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
-import type { HazardType } from './hazards.js'
+import type { AlertHazard, HazardType } from './hazards.js'
 
-export type { HazardType } from './hazards.js'
+export type { AlertHazard, HazardType } from './hazards.js'
 export type AlertLevel = 'Green' | 'Orange' | 'Red'
 
 export const ALERT_RANK: Record<AlertLevel, number> = { Green: 0, Orange: 1, Red: 2 }
@@ -36,7 +36,8 @@ export interface WatchArea {
   lon: number
   lat: number
   radiusKm: number
-  hazards: HazardType[]
+  /** GDACS types, and tsunami messages (TS) and fire clusters (HS) */
+  hazards: AlertHazard[]
   minAlert: AlertLevel
   /** Also alert when a cyclone's forecast cone reaches the area, before its winds do. Opt-in. */
   forecastAlerts: boolean
