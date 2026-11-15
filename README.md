@@ -18,6 +18,8 @@ You can also switch on **live flights** to see aircraft worldwide, coloured by a
 
 The **Sea & space** tab shows **ships** worldwide (with an AISStream key, see below), coloured by type, and **satellites** moving live: space stations, the brightest, navigation and weather satellites, Starlink, or all ~17,000 active ones, coloured by orbit. Find one by name or NORAD number, or click it, to see its height, speed and one full orbit.
 
+**Layers** (top of the panel) lists every layer in one place, to switch any of them on or off without hunting through the tabs; **Events only** switches off everything but the GDACS events. A **key** beside the panel explains the colours and shapes of whatever is on the globe, and leaves out layers hidden while looking back in History.
+
 **Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
 
 The **Weather** tab plays the last few hours of the world's **clouds** from satellite, shows the **wind** as moving particles, and gives the **temperature** and current conditions anywhere: pick a spot on the globe, use your location, or search for a place while the tab is open.

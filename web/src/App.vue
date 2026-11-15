@@ -4,6 +4,8 @@ import AlertSetup from './components/AlertSetup.vue'
 import CameraControls from './components/CameraControls.vue'
 import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
+import LayerList from './components/LayerList.vue'
+import MapLegend from './components/MapLegend.vue'
 import SatellitePanel from './components/SatellitePanel.vue'
 import ShipPanel from './components/ShipPanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
@@ -23,6 +25,7 @@ import { formatDay, useTimeline } from './composables/useTimeline'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
 import { useWindLayer } from './composables/useWindLayer'
+import { createLayerRegistry } from './layers/registry'
 
 const globeEl = ref<HTMLElement | null>(null)
 const viewer = useViewer(globeEl)
@@ -41,6 +44,8 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
+const layers = createLayerRegistry({ hazards, forecast, quakes, clouds, wind, flights, ships, satellites, timeline })
+const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
 const tab = ref<'events' | 'weather' | 'flights' | 'space' | 'alerts'>('events')
@@ -74,10 +79,21 @@ watch(search.found, (place) => {
 
   <aside class="panel" :class="{ collapsed: !panelOpen }">
     <header class="panel-head">
-      <button class="grip" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
-        <strong>Hazard Globe</strong>
-        <span class="chev">{{ panelOpen ? '▾' : '▴' }}</span>
-      </button>
+      <div class="head-row">
+        <button class="grip" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
+          <strong>Hazard Globe</strong>
+          <span class="chev">{{ panelOpen ? '▾' : '▴' }}</span>
+        </button>
+        <button
+          type="button"
+          class="layers-button"
+          :aria-expanded="layerListOpen"
+          aria-haspopup="dialog"
+          @click="layerListOpen = !layerListOpen"
+        >
+          Layers <span class="count">{{ layers.activeCount.value }}</span>
+        </button>
+      </div>
       <nav v-show="panelOpen" class="tabs" role="tablist">
         <button role="tab" :aria-selected="tab === 'events'" :class="{ on: tab === 'events' }" @click="tab = 'events'">
           Events
@@ -96,6 +112,8 @@ watch(search.found, (place) => {
         </button>
       </nav>
     </header>
+
+    <LayerList v-if="layerListOpen" :layers="layers" @close="layerListOpen = false" />
 
     <div v-show="panelOpen" class="panel-body">
       <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" />
@@ -121,6 +139,8 @@ watch(search.found, (place) => {
       </p>
     </div>
   </aside>
+
+  <MapLegend :layers="layers" :beside="panelOpen" />
 
   <!-- So a past day is never mistaken for what is happening now -->
   <div v-if="timeline.mode.value === 'history' && !picking" class="history-badge" role="status">
@@ -163,10 +183,33 @@ watch(search.found, (place) => {
   padding: 12px 12px 0;
 }
 
+.head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.layers-button {
+  flex: none;
+  padding: 3px 10px;
+  font-size: 13px;
+}
+
+.layers-button .count {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--line);
+  font-size: 11px;
+}
+
 .grip {
   all: unset;
   display: flex;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   justify-content: space-between;
   align-items: center;
   cursor: pointer;
