@@ -3,6 +3,7 @@ import type { useClimatologyLayer } from '../composables/useClimatologyLayer'
 import type { useCloudLayer } from '../composables/useCloudLayer'
 import { DEPTH_BANDS, type useEarthquakeLayer } from '../composables/useEarthquakeLayer'
 import { ALTITUDE_BANDS, type useFlightLayer } from '../composables/useFlightLayer'
+import type { useGibsLayers } from '../composables/useGibsLayers'
 import { FLOOD_LEVELS, FORECAST_LAYERS, type useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { ORBIT_CLASSES, SATELLITE_GROUPS, type SatelliteGroup, type useSatelliteLayer } from '../composables/useSatelliteLayer'
@@ -10,6 +11,7 @@ import { SHIP_KINDS, type useShipLayer } from '../composables/useShipLayer'
 import type { useTimeline } from '../composables/useTimeline'
 import { WIND_SCALE, type useWindLayer } from '../composables/useWindLayer'
 import { HAZARD_TYPES, HAZARDS, hazardSymbol } from '../hazards'
+import { GIBS, GIBS_IDS } from './gibs'
 import { SEQUENTIAL } from '../services/ramps'
 import { ALERT_COLOURS } from '../types'
 
@@ -42,6 +44,7 @@ export interface LayerDeps {
   forecast: ReturnType<typeof useFloodForecastLayer>
   quakes: ReturnType<typeof useEarthquakeLayer>
   climatology: ReturnType<typeof useClimatologyLayer>
+  gibs: ReturnType<typeof useGibsLayers>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
   flights: ReturnType<typeof useFlightLayer>
@@ -116,6 +119,18 @@ export function createLayerRegistry(d: LayerDeps) {
       ),
       liveOnly: true,
     },
+    ...GIBS_IDS.map(
+      (id): LayerEntry => ({
+        id: `gibs-${id}`,
+        label: GIBS[id].label,
+        group: GIBS[id].tab === 'weather' ? 'Weather' : 'Sea & space',
+        on: toggle(
+          () => d.gibs.on.value[id],
+          (on) => (d.gibs.on.value[id] = on),
+        ),
+        liveOnly: false, // daily maps: History shows the day looked at
+      }),
+    ),
     {
       id: 'wind',
       label: 'Wind',
@@ -198,6 +213,9 @@ export function createLayerRegistry(d: LayerDeps) {
     }
     if (showing('glofas-summary') || showing('glofas-points')) {
       out.push({ title: 'Flood forecast (GloFAS)', swatches: FLOOD_LEVELS.map((l) => ({ ...l })) })
+    }
+    for (const id of GIBS_IDS) {
+      if (showing(`gibs-${id}`)) out.push({ title: GIBS[id].legend.title, gradient: GIBS[id].legend.colours, ends: GIBS[id].legend.ends })
     }
     if (showing('wind')) {
       out.push({ title: 'Wind', gradient: WIND_SCALE.colours, ends: ['Calm', `${kmh(WIND_SCALE.max)}+ km/h`] })

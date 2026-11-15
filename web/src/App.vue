@@ -4,6 +4,7 @@ import AlertSetup from './components/AlertSetup.vue'
 import CameraControls from './components/CameraControls.vue'
 import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
+import GibsControls from './components/GibsControls.vue'
 import LayerList from './components/LayerList.vue'
 import MapLegend from './components/MapLegend.vue'
 import SatellitePanel from './components/SatellitePanel.vue'
@@ -14,6 +15,7 @@ import { useClimatologyLayer } from './composables/useClimatologyLayer'
 import { useCloudLayer } from './composables/useCloudLayer'
 import { useEarthquakeLayer } from './composables/useEarthquakeLayer'
 import { useFlightDetails } from './composables/useFlightDetails'
+import { useGibsLayers } from './composables/useGibsLayers'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
 import { useGlobeClicks } from './composables/useGlobeClicks'
@@ -36,6 +38,7 @@ const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
 const quakes = useEarthquakeLayer(viewer, timeline, hazards.all)
 const climatology = useClimatologyLayer(viewer)
+const gibs = useGibsLayers(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -47,7 +50,7 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
-const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, clouds, wind, flights, ships, satellites, timeline })
+const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, clouds, wind, flights, ships, satellites, timeline })
 const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
@@ -170,11 +173,13 @@ watch(search.found, (place) => {
         :weather="temperature"
         :clouds="clouds"
         :wind="wind"
+        :gibs="gibs"
         :mode="timeline.mode.value"
         :searched="search.found.value"
       />
       <FlightPanel v-else-if="tab === 'flights'" :layer="flights" :card="flightCard" :mode="timeline.mode.value" />
       <template v-else-if="tab === 'space'">
+        <GibsControls :gibs="gibs" tab="space" />
         <ShipPanel :layer="ships" :mode="timeline.mode.value" />
         <SatellitePanel :layer="satellites" :mode="timeline.mode.value" />
       </template>

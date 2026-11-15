@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { useCloudLayer } from '../composables/useCloudLayer'
+import type { useGibsLayers } from '../composables/useGibsLayers'
 import type { useWindLayer } from '../composables/useWindLayer'
 import { compassPoint, formatTemperature, formatWind, localTime, type useTemperature } from '../composables/useTemperature'
 import type { TimelineMode } from '../composables/useTimeline'
 import { formatCoordinates, type Place } from '../services/geocoders'
 import { OPEN_METEO_URL } from '../services/openMeteo'
 import CloudControls from './CloudControls.vue'
+import GibsControls from './GibsControls.vue'
 import WindControls from './WindControls.vue'
 
 const props = defineProps<{
   weather: ReturnType<typeof useTemperature>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
+  gibs: ReturnType<typeof useGibsLayers>
   mode: TimelineMode
   /** The place last found with the globe's search box */
   searched: Place | null
@@ -44,8 +47,10 @@ const searchedElsewhere = computed(() => {
 
 <template>
   <section>
+    <!-- Daily, so it has past days too: shown in History as well -->
+    <GibsControls :gibs="gibs" tab="weather" />
     <p v-if="mode === 'history'" class="note">
-      Weather shows the last few hours, so it's hidden while you look at history.
+      Clouds, wind and temperature show the last few hours, so they're hidden while you look at history.
     </p>
     <template v-else>
       <CloudControls :clouds="clouds" />
