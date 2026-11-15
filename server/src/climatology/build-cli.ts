@@ -1,17 +1,19 @@
 /**
  * Builds the storm climatology from NOAA's IBTrACS into server/assets/climatology/.
  *
- *   npm run climatology --workspace server                 # downloads the since-1980 CSV (~145 MB)
- *   npm run climatology --workspace server -- path/to.csv  # or reads one already downloaded
+ *   npm run climatology --workspace server
  *
+ * Downloads the since-1980 CSV (~145 MB) into the system's temp folder, and reuses that copy for a day,
+ * so building again soon after doesn't download again. It takes no arguments: no path to read from.
  * Run yearly (.github/workflows/climatology.yml does) once a hurricane season is in the record.
  */
-import { createReadStream, statSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { extname, resolve, sep } from 'node:path'
+import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { gzipSync } from 'node:zlib'
 import { USER_AGENT } from '../gdacs.js'
 import { buildClimatology, readStorms } from './build.js'
@@ -19,28 +21,22 @@ import { buildClimatology, readStorms } from './build.js'
 const URL_SINCE_1980 =
   'https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/ibtracs.since1980.list.v04r01.csv'
 const OUT = new URL('../../assets/climatology/', import.meta.url)
+const CACHE = join(tmpdir(), 'hazard-globe', 'ibtracs.since1980.list.v04r01.csv')
+const CACHE_MS = 86_400_000
 
-/**
- * The CSV named on the command line, checked: a .csv file under this folder or the system's temp folder
- * (where a download would go), so the argument can't point the build at anything else on the machine.
- */
-function csvPath(arg: string, allowed = [process.cwd(), tmpdir()]): string {
-  const full = resolve(arg)
-  const inside = allowed.map((d) => resolve(d) + sep).some((d) => full.toLowerCase().startsWith(d.toLowerCase()))
-  if (extname(full).toLowerCase() !== '.csv' || !inside) {
-    throw new Error(`Expected a .csv file under ${allowed.join(' or ')}, got ${arg}`)
-  }
-  if (!statSync(full, { throwIfNoEntry: false })?.isFile()) throw new Error(`No such file: ${full}`)
-  return full
-}
-
+/** The CSV, downloaded to CACHE unless a copy from the last day is there already */
 async function input(): Promise<NodeJS.ReadableStream> {
-  const file = process.argv[2]
-  if (file) return createReadStream(csvPath(file))
+  const cached = await stat(CACHE).catch(() => null)
+  if (cached?.isFile() && Date.now() - cached.mtimeMs < CACHE_MS) {
+    console.log(`Using ${CACHE}, downloaded ${cached.mtime.toISOString()}`)
+    return createReadStream(CACHE)
+  }
   console.log(`Downloading ${URL_SINCE_1980}`)
   const res = await fetch(URL_SINCE_1980, { headers: { 'User-Agent': USER_AGENT } })
   if (!res.ok || !res.body) throw new Error(`IBTrACS ${res.status}`)
-  return Readable.fromWeb(res.body as import('node:stream/web').ReadableStream)
+  await mkdir(join(tmpdir(), 'hazard-globe'), { recursive: true })
+  await pipeline(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream), createWriteStream(CACHE))
+  return createReadStream(CACHE)
 }
 
 const started = Date.now()
