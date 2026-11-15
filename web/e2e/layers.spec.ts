@@ -74,3 +74,36 @@ test('“Events only” switches everything else off, and a click elsewhere clos
   await page.mouse.click(900, 450) // the globe
   await expect(list(page)).toHaveCount(0)
 })
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('the layer list fits on screen with the panel folded', async ({ page }) => {
+    await open(page) // opens the list…
+    await page.keyboard.press('Escape')
+    await page.locator('.panel .grip').click() // …folds the panel
+    await page.getByRole('button', { name: /^Layers/ }).click()
+    const box = (await list(page).boundingBox())!
+    expect(box.y).toBeGreaterThanOrEqual(0)
+    expect(box.y + box.height).toBeLessThanOrEqual(844)
+    await list(page).getByLabel('Satellites').check()
+    await expect(list(page).getByLabel('Satellites')).toBeChecked()
+  })
+
+  test('the key sits clear of the History badge', async ({ page }) => {
+    await open(page)
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'History' }).click()
+    const badge = (await page.getByRole('status').filter({ hasText: 'History ·' }).boundingBox())!
+    const keyBox = (await key(page).boundingBox())!
+    expect(keyBox.y).toBeGreaterThanOrEqual(badge.y + badge.height)
+  })
+
+  test('embedded, the key opens rather than the full app', async ({ page }) => {
+    await stubHazardData(page)
+    await page.goto('/?embed=1')
+    const fold = key(page).getByRole('button', { name: /Key/ })
+    await fold.click()
+    await expect(fold).toHaveAttribute('aria-expanded', 'true')
+  })
+})

@@ -160,3 +160,30 @@ test('a link made in 2D opens in 2D, at the same width of view', async ({ page }
   expect(camOf(page.url())).toBe('-60.0000,20.0000,12000000,0.0,-90.0')
   expect(modeOf(page.url())).toBe('2d')
 })
+
+test('a link keeps the quake feed and satellite groups, and loads only those', async ({ page }) => {
+  await stub(page)
+  const feeds: string[] = []
+  const groups: string[] = []
+  await page.route(/\/api\/earthquakes/, (r) => {
+    const feed = new URL(r.request().url()).searchParams.get('feed')!
+    feeds.push(feed)
+    return r.fulfill({ json: { feed, fetchedAt: new Date().toISOString(), generatedAt: null, quakes: [] } })
+  })
+  await page.route(/\/api\/satellites\//, (r) => {
+    const group = new URL(r.request().url()).pathname.split('/').pop()!
+    groups.push(group)
+    return r.fulfill({ json: { group, fetchedAt: new Date().toISOString(), satellites: [] } })
+  })
+  await page.goto('/#layers=gdacs-TC,satellites,usgs-quakes&quakes=week&sats=gnss')
+
+  await expect.poll(() => feeds).toEqual(['week']) // never the default day feed first
+  await expect.poll(() => groups).toEqual(['gnss']) // nor the default stations and brightest
+  await page.getByRole('tab', { name: 'Sea & space' }).click()
+  await expect(page.getByLabel('Navigation (GPS, Galileo…)')).toBeChecked()
+  await expect(page.getByLabel('Space stations')).not.toBeChecked()
+
+  await page.getByLabel('Weather', { exact: true }).check()
+  await expect.poll(() => new URL(page.url()).hash).toContain('sats=gnss,weather')
+  expect(new URL(page.url()).hash).toContain('quakes=week')
+})

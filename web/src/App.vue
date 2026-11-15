@@ -56,6 +56,8 @@ const url = useUrlState({
   timeline,
   tab,
   loaded: computed(() => [hazards.all.value, quakes.quakes.value]),
+  quakeFeed: quakes.feed,
+  satelliteGroups: satellites.groups,
 })
 
 /** Shown inside another site's page: the globe and its key only, with a way out to the full app */
@@ -158,8 +160,6 @@ watch(search.found, (place) => {
       </nav>
     </header>
 
-    <LayerList v-if="layerListOpen" :layers="layers" @close="layerListOpen = false" />
-
     <div v-show="panelOpen" class="panel-body">
       <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" />
       <WeatherPanel
@@ -185,6 +185,9 @@ watch(search.found, (place) => {
     </div>
   </aside>
 
+  <!-- Outside the panel, placed against the screen: on a phone the panel is a bottom sheet, and folded
+       it has no room below its header -->
+  <LayerList v-if="layerListOpen && !embedded" :layers="layers" @close="layerListOpen = false" />
   <MapLegend :layers="layers" :beside="panelOpen && !embedded" />
 
   <!-- So a past day is never mistaken for what is happening now -->

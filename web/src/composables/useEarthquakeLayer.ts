@@ -1,4 +1,14 @@
-import { Cartesian3, Color, CustomDataSource, Entity, HeightReference, NearFarScalar, type Viewer } from 'cesium'
+import {
+  Cartesian3,
+  Color,
+  ConstantPositionProperty,
+  ConstantProperty,
+  CustomDataSource,
+  Entity,
+  HeightReference,
+  NearFarScalar,
+  type Viewer,
+} from 'cesium'
 import { onBeforeUnmount, ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue'
 import { api } from '../services/api'
 import { escapeHtml } from '../services/html'
@@ -101,23 +111,44 @@ export function useEarthquakeLayer(
   let refreshTimer: ReturnType<typeof setTimeout> | undefined
   let latestRequest = 0
 
+  /**
+   * Updates the markers in place, by quake id: a quake still in the feed keeps its entity, so one that's
+   * selected keeps its card open (and a selection from a shared link survives) through each refresh.
+   */
   function render() {
-    source.entities.removeAll()
     const window = QUAKE_FEEDS[feed.value].windowMs
     const events = gdacsEvents.value
-    // Biggest last, so they draw on top
+    const ids = new Set(quakes.value.map((q) => `usgs-${q.id}`))
+    const entities = source.entities
+    entities.suspendEvents()
+    for (const e of [...entities.values]) if (!ids.has(e.id)) entities.remove(e)
+    // Biggest last, so new ones draw on top (those already there keep their place)
     for (const q of [...quakes.value].sort((a, b) => a.mag - b.mag)) {
+      const id = `usgs-${q.id}`
       const age = Math.min(1, Math.max(0, (Date.now() - q.time) / window))
-      source.entities.add(
+      // newest bright, a full feed's age down to a third
+      const colour = Color.fromCssColorString(depthColour(q.depthKm)).withAlpha(1 - 0.65 * age)
+      const name = `M ${q.mag.toFixed(1)} — ${q.place || 'Earthquake'}`
+      const description = describe(q, matchGdacs(q, events))
+      const existing = entities.getById(id)
+      if (existing) {
+        // USGS revises magnitude, place and position as a quake is reviewed
+        existing.name = name
+        existing.position = new ConstantPositionProperty(Cartesian3.fromDegrees(q.lon, q.lat))
+        existing.description = description
+        existing.point!.color = new ConstantProperty(colour)
+        existing.point!.pixelSize = new ConstantProperty(quakeSize(q.mag))
+        continue
+      }
+      entities.add(
         new Entity({
-          id: `usgs-${q.id}`,
-          name: `M ${q.mag.toFixed(1)} — ${q.place || 'Earthquake'}`,
+          id,
+          name,
           position: Cartesian3.fromDegrees(q.lon, q.lat),
-          description: describe(q, matchGdacs(q, events)),
+          description,
           point: {
             pixelSize: quakeSize(q.mag),
-            // newest bright, a full feed's age down to a third
-            color: Color.fromCssColorString(depthColour(q.depthKm)).withAlpha(1 - 0.65 * age),
+            color: colour,
             outlineColor: Color.BLACK.withAlpha(0.6),
             outlineWidth: 1,
             heightReference: HeightReference.CLAMP_TO_GROUND,
@@ -126,6 +157,7 @@ export function useEarthquakeLayer(
         }),
       )
     }
+    entities.resumeEvents()
     show()
   }
 
@@ -164,17 +196,16 @@ export function useEarthquakeLayer(
     { immediate: true },
   )
 
-  watch(enabled, (on) => {
-    if (on) void load()
-    else {
-      clearTimeout(refreshTimer)
-      show()
+  // One watcher for both, so a shared link setting the feed and switching on loads once, not twice
+  watch([enabled, feed], ([on, f], [, wasFeed]) => {
+    if (f !== wasFeed) {
+      quakes.value = [] // another feed's quakes don't belong
+      render()
     }
-  })
-  watch(feed, () => {
-    quakes.value = []
-    render()
-    void load()
+    // Shown (or hidden) at once: quakes already loaded stay usable while a refresh runs, or if it fails
+    show()
+    if (on) void load()
+    else clearTimeout(refreshTimer)
   })
   watch(timeline.mode, show)
   // GDACS events can arrive after the quakes: draw again so the cards can name their GDACS alert

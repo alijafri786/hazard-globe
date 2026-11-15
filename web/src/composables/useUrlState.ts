@@ -2,6 +2,8 @@ import { Cartesian3, Math as CesiumMath, type Entity, type Viewer } from 'cesium
 import { computed, nextTick, onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
 import type { LayerRegistry } from '../layers/registry'
 import { cameraView, type CameraView } from '../services/camera'
+import type { QuakeFeed } from '../types'
+import { SATELLITE_GROUPS, type SatelliteGroup } from './useSatelliteLayer'
 import { isHistoryDays, type HistoryDays, type useTimeline } from './useTimeline'
 
 export const TABS = ['events', 'weather', 'flights', 'space', 'alerts'] as const
@@ -16,6 +18,10 @@ export interface ViewState {
   event?: string
   tab?: Tab
   history?: { days: HistoryDays; day: string }
+  /** the USGS feed, when it's not the default past day */
+  quakes?: QuakeFeed
+  /** which satellite groups are on */
+  sats?: SatelliteGroup[]
 }
 
 const EVENT_ID = /^((TC|FL|EQ|VO|WF|DR)-\d{1,10}|usgs-[a-z0-9]{1,20})$/
@@ -59,6 +65,12 @@ export function parseViewState(hash: string): ViewState {
   const tab = q.get('tab')
   if (tab && (TABS as readonly string[]).includes(tab)) state.tab = tab as Tab
 
+  const quakes = q.get('quakes')
+  if (quakes === 'day' || quakes === 'week') state.quakes = quakes
+
+  const sats = q.get('sats')?.split(',').filter((g): g is SatelliteGroup => Object.hasOwn(SATELLITE_GROUPS, g))
+  if (sats?.length) state.sats = sats
+
   const [days, day] = q.get('history')?.split(':') ?? []
   if (days && day && isHistoryDays(Number(days)) && DAY.test(day) && !Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
     state.history = { days: Number(days) as HistoryDays, day }
@@ -80,6 +92,8 @@ export function formatViewState(s: ViewState): string {
   if (s.event) q.set('event', s.event)
   if (s.tab) q.set('tab', s.tab)
   if (s.history) q.set('history', `${s.history.days}:${s.history.day}`)
+  if (s.quakes) q.set('quakes', s.quakes)
+  if (s.sats) q.set('sats', [...s.sats].sort().join(','))
   // commas are safe in a fragment and much easier to read than %2C
   return q.toString().replaceAll('%2C', ',').replaceAll('%3A', ':')
 }
@@ -106,11 +120,17 @@ export function useUrlState({
   timeline,
   tab,
   loaded,
+  quakeFeed,
+  satelliteGroups,
 }: {
   viewer: ShallowRef<Viewer | null>
   layers: LayerRegistry
   timeline: ReturnType<typeof useTimeline>
   tab: Ref<Tab>
+  /** the USGS feed chosen, which the layer list's switch doesn't say */
+  quakeFeed: Ref<QuakeFeed>
+  /** which satellite groups are on, which the layer list's one switch doesn't say */
+  satelliteGroups: Ref<Record<SatelliteGroup, boolean>>
   /** changes whenever events or quakes arrive, so a linked event can be selected once it exists */
   loaded: Readonly<Ref<unknown>>
 }) {
@@ -137,6 +157,10 @@ export function useUrlState({
       if (selected && EVENT_ID.test(selected)) state.event = selected
     }
     if (timeline.mode.value === 'history') state.history = { days: timeline.days.value, day: isoDay(timeline.day.value) }
+    const on = (id: string) => layers.entries.some((e) => e.id === id && e.on.value)
+    if (on('usgs-quakes') && quakeFeed.value !== 'day') state.quakes = quakeFeed.value
+    const sats = (Object.keys(SATELLITE_GROUPS) as SatelliteGroup[]).filter((g) => satelliteGroups.value[g])
+    if (sats.length) state.sats = sats
     return state
   }
 
@@ -171,11 +195,22 @@ export function useUrlState({
   }
 
   async function apply(v: Viewer) {
+    // The feed before the layer goes on, so it loads the linked feed and not the default first
+    if (initial.quakes) quakeFeed.value = initial.quakes
     // Only a list naming at least one real layer (or none at all, deliberately) changes what's on
     const known = initial.layers?.filter((id) => layers.entries.some((e) => e.id === id))
     if (initial.layers && (known!.length || !initial.layers.length)) {
       const on = new Set(known)
-      for (const e of layers.entries) e.on.value = on.has(e.id)
+      for (const e of layers.entries) {
+        // Named groups are set below, exactly: the switch would turn its default groups on first
+        if (e.id === 'satellites' && initial.sats) continue
+        e.on.value = on.has(e.id)
+      }
+    }
+    if (initial.sats) {
+      satelliteGroups.value = Object.fromEntries(
+        (Object.keys(SATELLITE_GROUPS) as SatelliteGroup[]).map((g) => [g, initial.sats!.includes(g)]),
+      ) as Record<SatelliteGroup, boolean>
     }
     if (initial.tab) tab.value = initial.tab
     if (initial.history) {
@@ -217,7 +252,8 @@ export function useUrlState({
   )
 
   const layerState = computed(() => layers.entries.map((e) => e.on.value).join())
-  watch([layerState, tab, timeline.mode, timeline.days, timeline.index], scheduleWrite)
+  watch([layerState, tab, timeline.mode, timeline.days, timeline.index, quakeFeed], scheduleWrite)
+  watch(satelliteGroups, scheduleWrite, { deep: true })
   // A linked event can only be selected once it has loaded
   watch(loaded, () => pendingEvent && trySelect())
 

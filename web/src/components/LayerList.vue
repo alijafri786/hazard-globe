@@ -49,10 +49,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .layer-list {
-  position: absolute;
-  top: 52px;
-  right: 12px;
-  z-index: 3;
+  position: fixed;
+  /* under the Layers button, at the panel's right edge (16 + 380 - 12 - 260) */
+  top: 60px;
+  left: 124px;
+  z-index: 10;
   width: 260px;
   max-height: min(70vh, 560px);
   overflow-y: auto;
@@ -113,13 +114,14 @@ h3 {
 }
 
 @media (max-width: 640px) {
+  /* Down from the top of the screen, over the globe: it fits whether the bottom sheet is open or folded,
+     and stops short of the sheet's header so the Layers button can still close it */
   .layer-list {
-    top: 48px;
+    top: 8px;
     right: 8px;
     left: 8px;
     width: auto;
-    /* inside the bottom sheet, which is at most 60% of the screen */
-    max-height: calc(60vh - 64px);
+    max-height: calc(100% - 96px);
   }
 }
 </style>

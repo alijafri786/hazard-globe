@@ -108,13 +108,15 @@ li i {
 }
 
 @media (max-width: 640px) {
+  /* Below the History badge and the embed link, which sit at the top left on a phone */
   .map-legend,
   .map-legend.beside {
-    top: 8px;
+    top: 56px;
     bottom: auto;
     left: 8px;
     max-width: 60%;
-    max-height: 40%;
+    /* clear of the bottom sheet, up to 60% of the screen */
+    max-height: calc(40% - 64px);
   }
 }
 </style>

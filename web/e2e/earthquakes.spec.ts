@@ -19,7 +19,8 @@ const quake = (id: string, mag: number, extra: object = {}) => ({
   ...extra,
 })
 
-async function stub(page: Page, quakes: object[]) {
+/** `quakes` may be a function, asked at each request: null makes the server fail */
+async function stub(page: Page, quakes: object[] | (() => object[] | null)) {
   const feeds: string[] = []
   await page.route('**/api/events', (r) =>
     r.fulfill({
@@ -50,7 +51,9 @@ async function stub(page: Page, quakes: object[]) {
   await page.route(/\/api\/earthquakes/, (r) => {
     const feed = new URL(r.request().url()).searchParams.get('feed')!
     feeds.push(feed)
-    return r.fulfill({ json: { feed, fetchedAt: new Date().toISOString(), generatedAt: new Date().toISOString(), quakes } })
+    const now = typeof quakes === 'function' ? quakes() : quakes
+    if (!now) return r.fulfill({ status: 503, json: { error: 'Earthquake data unavailable, try again shortly' } })
+    return r.fulfill({ json: { feed, fetchedAt: new Date().toISOString(), generatedAt: new Date().toISOString(), quakes: now } })
   })
   return feeds
 }
@@ -89,4 +92,47 @@ test('a quake’s card gives its depth, the tsunami caveat, and the GDACS alert 
   await expect(card.getByRole('row', { name: /GDACS alert/ })).toContainText('Orange')
   await expect(card.getByText(/doesn't mean a\s+tsunami happened/)).toBeVisible()
   await expect(card.getByRole('link', { name: 'GDACS report ↗' })).toBeVisible()
+})
+
+async function clickCentre(page: Page) {
+  await page.locator('.panel .grip').click()
+  const box = (await page.locator('.globe canvas').first().boundingBox())!
+  await page.waitForTimeout(2000)
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await page.locator('.panel .grip').click()
+}
+
+const title = (page: Page) => page.locator('.cesium-infoBox-title')
+
+test('a selected quake keeps its card through a refresh, updated', async ({ page }) => {
+  let mag = 6.4
+  await page.clock.install()
+  await stub(page, () => [quake('us9', mag)])
+  await page.goto('/')
+  await page.getByLabel('Earthquakes', { exact: true }).uncheck()
+  await page.getByLabel('Show every recent earthquake, live').check()
+  await expect(page.getByRole('status').filter({ hasText: 'USGS feed' })).toContainText('1 earthquakes')
+  await clickCentre(page)
+  await expect(title(page)).toHaveText('M 6.4 — 10 km N of Testville')
+
+  mag = 6.6 // USGS revises it
+  await page.clock.fastForward(130_000) // past the 2-minute refresh
+  await expect(title(page)).toHaveText('M 6.6 — 10 km N of Testville')
+})
+
+test('switched back on, quakes already loaded show at once, even if the refresh fails', async ({ page }) => {
+  let up = true
+  await stub(page, () => (up ? [quake('us5', 6.0)] : null))
+  await page.goto('/')
+  await page.getByLabel('Earthquakes', { exact: true }).uncheck()
+  const toggle = page.getByLabel('Show every recent earthquake, live')
+  await toggle.check()
+  await expect(page.getByRole('status').filter({ hasText: 'USGS feed' })).toContainText('1 earthquakes')
+  await toggle.uncheck()
+
+  up = false
+  await toggle.check()
+  await expect(page.getByText("Couldn't load earthquakes")).toBeVisible()
+  await clickCentre(page)
+  await expect(title(page)).toHaveText('M 6.0 — 10 km N of Testville')
 })

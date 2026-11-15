@@ -20,7 +20,7 @@ The **Sea & space** tab shows **ships** worldwide (with an AISStream key, see be
 
 **Layers** (top of the panel) lists every layer in one place, to switch any of them on or off without hunting through the tabs; **Events only** switches off everything but the GDACS events. A **key** beside the panel explains the colours and shapes of whatever is on the globe, and leaves out layers hidden while looking back in History.
 
-**Share** copies a link to what you're looking at: the camera, the layers that are on, the selected event or earthquake, the tab, and the day when looking back. Opening the link shows the same view. It never includes your watch areas, alerts or searched places.
+**Share** copies a link to what you're looking at: the camera (on the globe, the flat map or Columbus view), the layers that are on (with the earthquake feed and satellite groups chosen), the selected event or earthquake, the tab, and the day when looking back. Opening the link shows the same view. It never includes your watch areas, alerts or searched places.
 
 **Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
 
