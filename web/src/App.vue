@@ -16,6 +16,7 @@ import { useCameraControls } from './composables/useCameraControls'
 import { useClimatologyLayer } from './composables/useClimatologyLayer'
 import { useCloudLayer } from './composables/useCloudLayer'
 import { useEarthquakeLayer } from './composables/useEarthquakeLayer'
+import { useFirmsLayer } from './composables/useFirmsLayer'
 import { useFlightDetails } from './composables/useFlightDetails'
 import { useGibsLayers } from './composables/useGibsLayers'
 import { useFlightLayer } from './composables/useFlightLayer'
@@ -44,6 +45,7 @@ const climatology = useClimatologyLayer(viewer)
 const gibs = useGibsLayers(viewer, timeline)
 const aurora = useAuroraLayer(viewer, timeline)
 const tsunami = useTsunamiLayer(viewer, timeline)
+const firms = useFirmsLayer(viewer, timeline)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -55,7 +57,7 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
-const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, aurora, tsunami, clouds, wind, flights, ships, satellites, timeline })
+const layers = createLayerRegistry({ hazards, forecast, quakes, climatology, gibs, aurora, tsunami, firms, clouds, wind, flights, ships, satellites, timeline })
 const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
@@ -172,7 +174,7 @@ watch(search.found, (place) => {
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" :gibs="gibs" :tsunami="tsunami" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" :climatology="climatology" :gibs="gibs" :tsunami="tsunami" :firms="firms" />
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"

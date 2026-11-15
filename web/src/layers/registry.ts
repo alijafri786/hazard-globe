@@ -3,6 +3,7 @@ import { AURORA_COLOURS, AURORA_MAX, AURORA_MIN, type useAuroraLayer } from '../
 import type { useClimatologyLayer } from '../composables/useClimatologyLayer'
 import type { useCloudLayer } from '../composables/useCloudLayer'
 import { DEPTH_BANDS, type useEarthquakeLayer } from '../composables/useEarthquakeLayer'
+import { FRP_BANDS, type useFirmsLayer } from '../composables/useFirmsLayer'
 import { ALTITUDE_BANDS, type useFlightLayer } from '../composables/useFlightLayer'
 import type { useGibsLayers } from '../composables/useGibsLayers'
 import { FLOOD_LEVELS, FORECAST_LAYERS, type useFloodForecastLayer } from '../composables/useFloodForecastLayer'
@@ -49,6 +50,7 @@ export interface LayerDeps {
   gibs: ReturnType<typeof useGibsLayers>
   aurora: ReturnType<typeof useAuroraLayer>
   tsunami: ReturnType<typeof useTsunamiLayer>
+  firms: ReturnType<typeof useFirmsLayer>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
   flights: ReturnType<typeof useFlightLayer>
@@ -88,6 +90,16 @@ export function createLayerRegistry(d: LayerDeps) {
       on: toggle(
         () => d.quakes.enabled.value,
         (on) => (d.quakes.enabled.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
+      id: 'firms',
+      label: 'Fires, live (FIRMS)',
+      group: 'Events',
+      on: toggle(
+        () => d.firms.enabled.value,
+        (on) => (d.firms.enabled.value = on),
       ),
       liveOnly: true,
     },
@@ -241,6 +253,13 @@ export function createLayerRegistry(d: LayerDeps) {
         gradient: SEQUENTIAL,
         ends: [fmt(scale.min), `${fmt(scale.max)}+`],
       })
+    }
+    if (showing('firms') && d.firms.available.value) {
+      out.push(
+        d.firms.close.value
+          ? { title: 'Fires by power (FIRMS)', swatches: FRP_BANDS.map((b) => ({ colour: b.colour, label: b.label })) }
+          : { title: 'Fires per 25 km cell, last day', gradient: SEQUENTIAL, ends: ['1', `${d.firms.scaleMax.value ?? ''}+`] },
+      )
     }
     if (showing('tsunami') || showing('dart')) {
       out.push({

@@ -1,5 +1,7 @@
 import type {
   AuroraGrid,
+  FireDetection,
+  FireGrid,
   DartReadings,
   DartStation,
   TsunamiMessage,
@@ -91,6 +93,16 @@ export const api = {
       throw err
     })
   },
+
+  /** Null when the server has no FIRMS key */
+  firesGrid: () =>
+    request<FireGrid>('/api/fires/grid').catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 501) return null
+      throw err
+    }),
+
+  fires: (box: [number, number, number, number]) =>
+    request<{ detections: FireDetection[] }>(`/api/fires?bbox=${box.map((v) => v.toFixed(3)).join(',')}`),
 
   tsunami: () => request<{ fetchedAt: string; messages: TsunamiMessage[] }>('/api/tsunami'),
 

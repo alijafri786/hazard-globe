@@ -293,3 +293,23 @@ export interface DartReadings {
   readings: { time: string; heightM: number }[]
   eventMode: boolean
 }
+
+/** A day of fire detections from NASA FIRMS on a 0.25° grid (see server/src/fires.ts) */
+export interface FireGrid {
+  fetchedAt: string
+  count: number
+  cols: number
+  rows: number
+  /** base64 of little-endian Uint16 counts, row-major from the north-west */
+  data: string
+}
+
+export interface FireDetection {
+  lat: number
+  lon: number
+  time: number
+  frp: number
+  confidence: 'nominal' | 'high'
+  satellite: string
+  day: boolean
+}

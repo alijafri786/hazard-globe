@@ -130,6 +130,16 @@ DATABASE_URL=postgres://user:password@host:5432/dbname
 npm run store:import --workspace server   # reads DATA_FILE; or add: -- path/to/store.json
 ```
 
+### Optional: live fires and fire alerts
+
+The globe always has NASA's daily map of fires seen from space. With a free [NASA FIRMS map key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) it also shows every single fire from the last day, with its time and power, and watch areas can choose to be alerted about fires nearby:
+
+```
+FIRMS_MAP_KEY=your-map-key
+```
+
+The server asks FIRMS for the last day of VIIRS detections (NOAA-20 and NOAA-21) at most every 30 minutes, and only while someone has the layer on or an area wants fire alerts, which keeps well inside FIRMS's limits. An area is alerted, at most once a day for each place, when an ~11 km patch has 3 or more confident detections in 12 hours, or one high-confidence detection of 100 MW or more. Patches that are hot on most days (gas flares, volcanoes, some factories) are left out once the server has seen a few weeks of them: that memory starts afresh when the server restarts.
+
 ### Optional: humanitarian reports
 
 Event cards can list [ReliefWeb](https://reliefweb.int)'s newest situation reports, maps and appeals for the disaster. ReliefWeb's API needs an app name it has approved: [request one](https://apidoc.reliefweb.int/parameters#appname), then add it to `server/.env`:
