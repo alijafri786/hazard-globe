@@ -1,4 +1,5 @@
 import { USER_AGENT } from './gdacs.js'
+import { createCachedSource } from './source.js'
 import type { OrbitalElements, SatellitesSnapshot } from './types.js'
 
 const GP_URL = 'https://celestrak.org/NORAD/elements/gp.php'
@@ -58,41 +59,22 @@ export async function fetchGroup(group: SatelliteGroup): Promise<OrbitalElements
   return parseElements(JSON.parse(text))
 }
 
-interface Entry {
-  snapshot?: SatellitesSnapshot
-  nextAttemptAt: number
-  inflight?: Promise<void>
-}
-
 /**
  * Orbits by group, fetched from CelesTrak at most once per 2 hours whoever is looking. A due refresh
  * is shared by concurrent requests; while it runs, and if it fails, the last good copy is served.
+ * Orbits a couple of hours old are still good to a few km, so only the very first request waits.
  */
 export function createSatellites(fetch: typeof fetchGroup = fetchGroup, now = Date.now) {
-  const cache = new Map<SatelliteGroup, Entry>()
-
-  function refresh(group: SatelliteGroup, entry: Entry) {
-    entry.inflight = fetch(group)
-      .then((satellites) => {
-        entry.snapshot = { group, fetchedAt: new Date(now()).toISOString(), satellites }
-        entry.nextAttemptAt = now() + TTL_MS
-        console.log(`[satellites] ${group}: ${satellites.length}`)
-      })
-      .catch((err: Error) => {
-        entry.nextAttemptAt = now() + FAILURE_RETRY_MS
-        console.error(`[satellites] ${group} failed:`, err.message)
-      })
-      .finally(() => {
-        entry.inflight = undefined
-      })
-  }
-
-  return async function satellites(group: SatelliteGroup): Promise<SatellitesSnapshot | null> {
-    let entry = cache.get(group)
-    if (!entry) cache.set(group, (entry = { nextAttemptAt: 0 }))
-    if (!entry.inflight && now() >= entry.nextAttemptAt) refresh(group, entry)
-    // Orbits a couple of hours old are still good to a few km, so only the very first request waits
-    if (!entry.snapshot && entry.inflight) await entry.inflight
-    return entry.snapshot ?? null
-  }
+  const source = createCachedSource<SatelliteGroup, SatellitesSnapshot>({
+    ttlMs: TTL_MS,
+    failureRetryMs: FAILURE_RETRY_MS,
+    name: 'satellites',
+    now,
+    fetch: async (group) => {
+      const satellites = await fetch(group)
+      console.log(`[satellites] ${group}: ${satellites.length}`)
+      return { group, fetchedAt: new Date(now()).toISOString(), satellites }
+    },
+  })
+  return (group: SatelliteGroup): Promise<SatellitesSnapshot | null> => source.get(group)
 }
