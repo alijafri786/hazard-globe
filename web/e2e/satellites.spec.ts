@@ -122,8 +122,9 @@ test('satellites: click one on the globe; clicks elsewhere still reach the rest 
     await expect(infoTitle(page)).toHaveText('GPS BIIF-1 (PRN 25)', { timeout: 1_000 })
   }).toPass({ timeout: 10_000 })
 
-  // Empty space below the globe isn't a satellite: Cesium's own click runs and clears the selection
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 120)
+  // Empty space off the globe isn't a satellite: Cesium's own click runs and clears the selection.
+  // Off to the right, clear of the map key at the bottom left and the camera buttons at the right.
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height - 120)
   await expect(infoTitle(page)).not.toBeVisible()
 })
 
