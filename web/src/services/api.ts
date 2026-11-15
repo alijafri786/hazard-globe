@@ -1,5 +1,6 @@
 import type {
   AuroraGrid,
+  EventReports,
   ChannelView,
   SpaceWeatherSummary,
   ClimatologyInfo,
@@ -77,6 +78,16 @@ export const api = {
 
   climatologyNear: (lon: number, lat: number, radiusKm: number) =>
     request<PlaceClimatology>(`/api/climatology/near?lon=${lon}&lat=${lat}&radiusKm=${radiusKm}`),
+
+  /** Null when the server has no ReliefWeb app name set up */
+  reports: (q: { type: HazardType; glide?: string; iso3?: string; date?: string }) => {
+    const params = new URLSearchParams({ type: q.type })
+    for (const k of ['glide', 'iso3', 'date'] as const) if (q[k]) params.set(k, q[k]!)
+    return request<EventReports>(`/api/reports?${params}`).catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 501) return null
+      throw err
+    })
+  },
 
   aurora: () => request<AuroraGrid>('/api/space/aurora'),
 

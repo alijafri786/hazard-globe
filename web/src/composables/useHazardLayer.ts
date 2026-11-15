@@ -204,6 +204,29 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
     }
   }
 
+  /**
+   * ReliefWeb's newest reports on the event's disaster, added to its card once they arrive: asked only when
+   * a card is opened, and not at all when the server has no ReliefWeb app name.
+   */
+  async function showReports(entity: Entity, e: HazardEvent) {
+    const p = e.properties
+    const glide = p.glide && /^[A-Z]{2}-\d{4}-\d{6}-[A-Z]{3}$/.test(p.glide) ? p.glide : undefined
+    const iso3 = typeof p.iso3 === 'string' && /^[A-Z]{3}$/.test(p.iso3) ? p.iso3 : undefined
+    const date = p.fromdate?.slice(0, 10)
+    const answer = await api.reports({ type: p.eventtype, glide, iso3, date }).catch(() => null)
+    if (!answer?.disaster || !answer.reports.length || viewer.value?.selectedEntity !== entity) return
+    const items = answer.reports
+      .map(
+        (r) => `<li><a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.title)}</a>
+          <br/><small style="opacity:.75">${escapeHtml([r.format, r.source, r.date].filter(Boolean).join(' · '))}</small></li>`,
+      )
+      .join('')
+    entity.description = `${describe(e)}<h4 style="margin:12px 0 4px">Humanitarian reports</h4>
+      <ul style="padding-left:18px;margin:0">${items}</ul>
+      <p><a href="${escapeHtml(answer.disaster.url)}" target="_blank" rel="noopener">All reports on ReliefWeb ↗</a></p>`
+    viewer.value?.scene.requestRender()
+  }
+
   let latestRequest = 0
 
   async function refresh() {
@@ -241,6 +264,7 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
       v.selectedEntityChanged.addEventListener((entity?: Entity) => {
         const hazard = entity?.properties?.hazard?.getValue() as HazardEvent | undefined
         void showFootprint(hazard ?? null)
+        if (entity && hazard) void showReports(entity, hazard)
       })
       void refresh()
     },

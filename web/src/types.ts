@@ -17,6 +17,14 @@ export interface HazardEventProps {
   severitydata?: { severitytext?: string }
   /** GLIDE disaster number, e.g. "EQ-2026-000186-VUT"; often empty */
   glide?: string
+  /** the main country, ISO 3166 alpha-3 */
+  iso3?: string
+}
+
+/** ReliefWeb's reports on an event's disaster (see server/src/reliefweb.ts) */
+export interface EventReports {
+  disaster: { name: string; url: string } | null
+  reports: { title: string; source: string; date: string; format: string; url: string }[]
 }
 
 export interface HazardEvent {

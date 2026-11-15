@@ -128,6 +128,16 @@ DATABASE_URL=postgres://user:password@host:5432/dbname
 npm run store:import --workspace server   # reads DATA_FILE; or add: -- path/to/store.json
 ```
 
+### Optional: humanitarian reports
+
+Event cards can list [ReliefWeb](https://reliefweb.int)'s newest situation reports, maps and appeals for the disaster. ReliefWeb's API needs an app name it has approved: [request one](https://apidoc.reliefweb.int/parameters#appname), then add it to `server/.env`:
+
+```
+RELIEFWEB_APPNAME=your-approved-app-name
+```
+
+The server looks a disaster up by its GLIDE number, or by type, country and a start within a week when exactly one matches, and only when someone opens its card. It keeps each answer for an hour. Only titles, sources, dates and links are shown; the reports belong to their publishers.
+
 ### Optional: ships
 
 Create a free API key at [aisstream.io](https://aisstream.io) and add it to `server/.env`:

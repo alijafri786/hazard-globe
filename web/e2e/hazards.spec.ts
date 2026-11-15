@@ -89,3 +89,37 @@ test('a watch area can choose any hazard type, and its summary names them', asyn
 
   await expect(page.getByRole('listitem').filter({ hasText: 'Home' })).toContainText('Storms and earthquakes, orange and red')
 })
+
+test('an event’s card lists ReliefWeb’s newest reports, when the server has them', async ({ page }) => {
+  const quake = event('EQ', 3, 'Earthquake in Atlantis', 30)
+  Object.assign(quake.properties, { glide: 'EQ-2026-000186-ATL', iso3: 'ATL' })
+  const asked: URLSearchParams[] = []
+  await page.route('**/api/events', (r) =>
+    r.fulfill({ json: { fetchedAt: new Date().toISOString(), days: 10, type: 'FeatureCollection', features: [quake] } }),
+  )
+  await page.route(/\/api\/events\/EQ\/3\/1\/geometry/, (r) => r.fulfill({ json: { type: 'FeatureCollection', features: [] } }))
+  await page.route(/\/api\/reports/, (r) => {
+    asked.push(new URL(r.request().url()).searchParams)
+    return r.fulfill({
+      json: {
+        disaster: { name: 'Atlantis: Earthquake - Nov 2026', url: 'https://reliefweb.int/disaster/eq-2026-000186-atl' },
+        reports: [
+          { title: 'Atlantis: Earthquake <Situation Report> No. 2', source: 'OCHA', date: '2026-11-14', format: 'Situation Report', url: 'https://reliefweb.int/report/atlantis/sitrep-2' },
+        ],
+      },
+    })
+  })
+  await page.goto('/')
+  await page.locator('.events button', { hasText: 'Earthquake in Atlantis' }).click()
+
+  const card = page.frameLocator('.cesium-infoBox-iframe')
+  await expect(card.getByText('Humanitarian reports')).toBeVisible()
+  // its title is text, never markup
+  await expect(card.getByRole('link', { name: 'Atlantis: Earthquake <Situation Report> No. 2' })).toHaveAttribute(
+    'href',
+    'https://reliefweb.int/report/atlantis/sitrep-2',
+  )
+  await expect(card.getByText('Situation Report · OCHA · 2026-11-14')).toBeVisible()
+  await expect(card.getByRole('link', { name: 'All reports on ReliefWeb ↗' })).toBeVisible()
+  expect(Object.fromEntries(asked[0])).toEqual({ type: 'EQ', glide: 'EQ-2026-000186-ATL', iso3: 'ATL', date: quake.properties.fromdate.slice(0, 10) })
+})

@@ -594,3 +594,26 @@ describe('space weather routes', () => {
     expect((await setup().app.request('/api/space/summary')).status).toBe(503)
   })
 })
+
+describe('GET /api/reports', () => {
+  const reliefweb = vi.fn<NonNullable<AppDeps['reliefweb']>>(async () => ({
+    disaster: { name: 'Earthquake', url: 'https://reliefweb.int/disaster/x' },
+    reports: [],
+  }))
+
+  it('passes what it was asked on, checked', async () => {
+    const { app } = setup({}, { reliefweb })
+    const ok = await app.request('/api/reports?type=EQ&glide=EQ-2026-000186-VUT&iso3=VUT&date=2026-10-08')
+    expect(ok.status).toBe(200)
+    expect(reliefweb).toHaveBeenLastCalledWith({ type: 'EQ', glide: 'EQ-2026-000186-VUT', iso3: 'VUT', date: '2026-10-08' })
+    for (const q of ['type=XX', 'type=EQ&glide=nope', 'type=EQ&iso3=vu', 'type=EQ&date=8 Oct']) {
+      expect((await app.request(`/api/reports?${q}`)).status).toBe(400)
+    }
+  })
+
+  it('says when ReliefWeb is not set up, or failed', async () => {
+    expect((await setup().app.request('/api/reports?type=EQ')).status).toBe(501)
+    reliefweb.mockRejectedValueOnce(new Error('ReliefWeb 503'))
+    expect((await setup({}, { reliefweb }).app.request('/api/reports?type=EQ&iso3=VUT&date=2026-10-08')).status).toBe(503)
+  })
+})

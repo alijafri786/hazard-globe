@@ -11,6 +11,7 @@ import { createHistory } from './history.js'
 import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { createSatellites } from './satellites.js'
+import { createReliefWeb } from './reliefweb.js'
 import { createShips } from './ships.js'
 import { createSpaceWeather } from './spaceWeather.js'
 import { openStore, storeKind } from './store/index.js'
@@ -63,6 +64,8 @@ const app = createApp({
   earthquakes: createEarthquakes(),
   climatology: await loadClimatology(),
   spaceWeather: createSpaceWeather(),
+  // Never in end-to-end runs: they mustn't reach ReliefWeb
+  reliefweb: config.reliefwebAppname && !e2e ? createReliefWeb({ appname: config.reliefwebAppname }) : undefined,
   // Never in end-to-end runs: they mustn't open a real stream
   ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
   deliver,

@@ -10,6 +10,7 @@ import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
 import type { Climatology } from './climatology/index.js'
 import { isStormClass, SLICES, STORM_CLASSES } from './climatology/model.js'
+import { isGlide, type ReliefWeb } from './reliefweb.js'
 import type { SpaceWeather } from './spaceWeather.js'
 import { isQuakeFeed, QUAKE_FEEDS, type QuakeFeed, type QuakesSnapshot } from './earthquakes.js'
 import { fetchGeometryCollection } from './gdacs.js'
@@ -48,6 +49,8 @@ export interface AppDeps {
   wind: () => Promise<WindGrid | null>
   /** How often storms pass each place, from IBTrACS (see climatology/); null when it hasn't been built */
   climatology?: Climatology | null
+  /** ReliefWeb reports for an event (see reliefweb.ts); present when an app name is set */
+  reliefweb?: ReliefWeb
   /** Aurora forecast and the Kp index from NOAA SWPC (see spaceWeather.ts) */
   spaceWeather?: Pick<SpaceWeather, 'aurora' | 'summary'>
   /** USGS earthquakes by feed (see earthquakes.ts) */
@@ -273,6 +276,23 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     }
     c.header('Cache-Control', 'public, max-age=3600')
     return c.json(deps.climatology.near(lon, lat, radiusKm))
+  })
+
+  // Asked only when someone opens an event's card; every new answer costs two ReliefWeb requests
+  app.get('/api/reports', rateLimit({ windowMs: MINUTE, max: 30, key: byIp, now }), async (c) => {
+    if (!deps.reliefweb) return c.json({ error: "ReliefWeb reports aren't set up on this server" }, 501)
+    const type = c.req.query('type') ?? ''
+    const glide = c.req.query('glide') || undefined
+    const iso3 = c.req.query('iso3') || undefined
+    const date = c.req.query('date') || undefined
+    if (!isHazardType(type)) return c.json({ error: 'unsupported hazard type' }, 400)
+    if ((glide && !isGlide(glide)) || (iso3 && !/^[A-Z]{3}$/.test(iso3)) || (date && !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
+      return c.json({ error: 'glide, iso3 or date is malformed' }, 400)
+    }
+    const answer = await deps.reliefweb({ type, glide, iso3, date }).catch(() => null)
+    if (!answer) return c.json({ error: 'ReliefWeb unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=1800')
+    return c.json(answer)
   })
 
   const noSpaceWeather = { error: 'Space weather unavailable, try again shortly' }
