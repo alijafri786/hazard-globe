@@ -22,6 +22,7 @@ import { useSearchPin } from './composables/useSearchPin'
 import { useShipLayer } from './composables/useShipLayer'
 import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
+import { useUrlState, type Tab } from './composables/useUrlState'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
 import { useWindLayer } from './composables/useWindLayer'
@@ -48,7 +49,46 @@ const layers = createLayerRegistry({ hazards, forecast, quakes, clouds, wind, fl
 const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
-const tab = ref<'events' | 'weather' | 'flights' | 'space' | 'alerts'>('events')
+const tab = ref<Tab>('events')
+const url = useUrlState({
+  viewer,
+  layers,
+  timeline,
+  tab,
+  loaded: computed(() => [hazards.all.value, quakes.quakes.value]),
+})
+
+/** Shown inside another site's page: the globe and its key only, with a way out to the full app */
+const embedded = new URLSearchParams(location.search).has('embed')
+/** Built on the click, so it opens the view as it is now */
+function openFullApp() {
+  const u = new URL(url.link())
+  u.searchParams.delete('embed')
+  window.open(u.toString(), '_blank', 'noopener')
+}
+
+const shared = ref<string | null>(null)
+let sharedTimer: ReturnType<typeof setTimeout> | undefined
+async function share() {
+  url.flush()
+  const link = url.link()
+  const note = (text: string) => {
+    shared.value = text
+    clearTimeout(sharedTimer)
+    sharedTimer = setTimeout(() => (shared.value = null), 2500)
+  }
+  try {
+    // A phone's share sheet; on a computer, straight to the clipboard
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'Hazard Globe', url: link })
+    else {
+      await navigator.clipboard.writeText(link)
+      note('Link copied')
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return // closed the share sheet
+    window.prompt('Copy this link to share this view', link)
+  }
+}
 
 const picking = computed(() => watchAreas.picking.value || temperature.picking.value)
 
@@ -77,13 +117,18 @@ watch(search.found, (place) => {
   <div ref="globeEl" class="globe" />
   <CameraControls :controls="camera" />
 
-  <aside class="panel" :class="{ collapsed: !panelOpen }">
+  <a v-if="embedded" class="open-full" href="./" target="_blank" rel="noopener" @click.prevent="openFullApp()">
+    Open in Hazard Globe ↗
+  </a>
+
+  <aside v-if="!embedded" class="panel" :class="{ collapsed: !panelOpen }">
     <header class="panel-head">
       <div class="head-row">
         <button class="grip" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
           <strong>Hazard Globe</strong>
           <span class="chev">{{ panelOpen ? '▾' : '▴' }}</span>
         </button>
+        <button type="button" class="share-button" @click="share()">{{ shared ?? 'Share' }}</button>
         <button
           type="button"
           class="layers-button"
@@ -140,7 +185,7 @@ watch(search.found, (place) => {
     </div>
   </aside>
 
-  <MapLegend :layers="layers" :beside="panelOpen" />
+  <MapLegend :layers="layers" :beside="panelOpen && !embedded" />
 
   <!-- So a past day is never mistaken for what is happening now -->
   <div v-if="timeline.mode.value === 'history' && !picking" class="history-badge" role="status">
@@ -189,6 +234,7 @@ watch(search.found, (place) => {
   gap: 8px;
 }
 
+.share-button,
 .layers-button {
   flex: none;
   padding: 3px 10px;
@@ -203,6 +249,20 @@ watch(search.found, (place) => {
   border-radius: 8px;
   background: var(--line);
   font-size: 11px;
+}
+
+.open-full {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  text-decoration: none;
 }
 
 .grip {

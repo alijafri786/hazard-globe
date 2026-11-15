@@ -1,0 +1,209 @@
+import { Cartesian3, Math as CesiumMath, type Entity, type Viewer } from 'cesium'
+import { computed, nextTick, onBeforeUnmount, watch, type Ref, type ShallowRef } from 'vue'
+import type { LayerRegistry } from '../layers/registry'
+import { isHistoryDays, type HistoryDays, type useTimeline } from './useTimeline'
+
+export const TABS = ['events', 'weather', 'flights', 'space', 'alerts'] as const
+export type Tab = (typeof TABS)[number]
+
+/** What a shared link restores. Watch areas, alerts and searched places are never part of it. */
+export interface ViewState {
+  cam?: { lon: number; lat: number; height: number; heading: number; pitch: number }
+  layers?: string[]
+  /** a GDACS event (`TC-1001234`) or a USGS earthquake (`usgs-us7000tyek`) to select */
+  event?: string
+  tab?: Tab
+  history?: { days: HistoryDays; day: string }
+}
+
+const EVENT_ID = /^((TC|FL|EQ|VO|WF|DR)-\d{1,10}|usgs-[a-z0-9]{1,20})$/
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+const LAYER_ID = /^[a-z0-9-]{1,30}$/i
+
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+
+/** Reads a fragment such as `#cam=…&layers=…`. Untrusted: anything malformed is left out, numbers clamped. */
+export function parseViewState(hash: string): ViewState {
+  const q = new URLSearchParams(hash.replace(/^#/, ''))
+  const state: ViewState = {}
+
+  const cam = q.get('cam')?.split(',').map(Number)
+  if (cam?.length === 5 && cam.every(Number.isFinite)) {
+    const [lon, lat, height, heading, pitch] = cam
+    state.cam = {
+      lon: clamp(lon, -180, 180),
+      lat: clamp(lat, -90, 90),
+      height: clamp(height, 100, 5e7),
+      heading: ((heading % 360) + 360) % 360,
+      pitch: clamp(pitch, -90, 0),
+    }
+  }
+
+  // `layers=` is a view with everything off; a list with nothing usable in it is ignored
+  const layers = q.get('layers')
+  if (layers === '') state.layers = []
+  else if (layers !== null) {
+    const ids = layers.split(',').filter((id) => LAYER_ID.test(id)).slice(0, 50)
+    if (ids.length) state.layers = ids
+  }
+
+  const event = q.get('event')
+  if (event && EVENT_ID.test(event)) state.event = event
+
+  const tab = q.get('tab')
+  if (tab && (TABS as readonly string[]).includes(tab)) state.tab = tab as Tab
+
+  const [days, day] = q.get('history')?.split(':') ?? []
+  if (days && day && isHistoryDays(Number(days)) && DAY.test(day) && !Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
+    state.history = { days: Number(days) as HistoryDays, day }
+  }
+  return state
+}
+
+/** The fragment for a view, in a fixed order, so the same view always gives the same link */
+export function formatViewState(s: ViewState): string {
+  const q = new URLSearchParams()
+  if (s.cam) {
+    const { lon, lat, height, heading, pitch } = s.cam
+    q.set('cam', [lon.toFixed(4), lat.toFixed(4), Math.round(height), heading.toFixed(1), pitch.toFixed(1)].join(','))
+  }
+  if (s.layers) q.set('layers', [...s.layers].sort().join(','))
+  if (s.event) q.set('event', s.event)
+  if (s.tab) q.set('tab', s.tab)
+  if (s.history) q.set('history', `${s.history.days}:${s.history.day}`)
+  // commas are safe in a fragment and much easier to read than %2C
+  return q.toString().replaceAll('%2C', ',').replaceAll('%3A', ':')
+}
+
+const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10)
+
+function findEntity(viewer: Viewer, id: string): Entity | undefined {
+  for (let i = 0; i < viewer.dataSources.length; i++) {
+    const found = viewer.dataSources.get(i).entities.getById(id)
+    if (found) return found
+  }
+  return undefined
+}
+
+/**
+ * Keeps the view in the address bar's fragment, so the link can be shared or bookmarked and opens
+ * the same view: camera, layers, selected event, tab and History day. Read once on load, then
+ * rewritten with replaceState (no history entries for every camera move) once things settle.
+ */
+export function useUrlState({
+  viewer,
+  layers,
+  timeline,
+  tab,
+  loaded,
+}: {
+  viewer: ShallowRef<Viewer | null>
+  layers: LayerRegistry
+  timeline: ReturnType<typeof useTimeline>
+  tab: Ref<Tab>
+  /** changes whenever events or quakes arrive, so a linked event can be selected once it exists */
+  loaded: Readonly<Ref<unknown>>
+}) {
+  const initial = parseViewState(location.hash)
+  let ready = false
+  let pendingEvent = initial.event
+  let writeTimer: ReturnType<typeof setTimeout> | undefined
+
+  function current(): ViewState {
+    const v = viewer.value
+    const state: ViewState = {
+      layers: layers.entries.filter((e) => e.on.value).map((e) => e.id),
+      tab: tab.value,
+    }
+    if (v) {
+      const c = v.camera.positionCartographic
+      state.cam = {
+        lon: CesiumMath.toDegrees(c.longitude),
+        lat: CesiumMath.toDegrees(c.latitude),
+        height: c.height,
+        heading: CesiumMath.toDegrees(v.camera.heading),
+        pitch: CesiumMath.toDegrees(v.camera.pitch),
+      }
+      const selected = v.selectedEntity?.id
+      if (selected && EVENT_ID.test(selected)) state.event = selected
+    }
+    if (timeline.mode.value === 'history') state.history = { days: timeline.days.value, day: isoDay(timeline.day.value) }
+    return state
+  }
+
+  /** The link to this view now */
+  function link(): string {
+    return `${location.origin}${location.pathname}${location.search}#${formatViewState(current())}`
+  }
+
+  function write() {
+    clearTimeout(writeTimer)
+    if (!ready) return
+    history.replaceState(history.state, '', `${location.pathname}${location.search}#${formatViewState(current())}`)
+  }
+  const scheduleWrite = () => {
+    clearTimeout(writeTimer)
+    writeTimer = setTimeout(write, 400)
+  }
+
+  function trySelect() {
+    const v = viewer.value
+    if (!v || !pendingEvent) return
+    const entity = findEntity(v, pendingEvent)
+    if (!entity) return
+    pendingEvent = undefined
+    v.selectedEntity = entity
+  }
+
+  async function apply(v: Viewer) {
+    // Only a list naming at least one real layer (or none at all, deliberately) changes what's on
+    const known = initial.layers?.filter((id) => layers.entries.some((e) => e.id === id))
+    if (initial.layers && (known!.length || !initial.layers.length)) {
+      const on = new Set(known)
+      for (const e of layers.entries) e.on.value = on.has(e.id)
+    }
+    if (initial.tab) tab.value = initial.tab
+    if (initial.history) {
+      timeline.days.value = initial.history.days
+      timeline.mode.value = 'history'
+      await nextTick() // the mode change moves to today first
+      const at = timeline.dayList.value.findIndex((d) => isoDay(d) === initial.history!.day)
+      if (at >= 0) timeline.index.value = at
+    }
+    if (initial.cam) {
+      const { lon, lat, height, heading, pitch } = initial.cam
+      v.camera.setView({
+        destination: Cartesian3.fromDegrees(lon, lat, height),
+        orientation: { heading: CesiumMath.toRadians(heading), pitch: CesiumMath.toRadians(pitch), roll: 0 },
+      })
+    }
+    trySelect()
+    ready = true
+  }
+
+  let removeCameraListener: (() => void) | undefined
+  let removeSelectionListener: (() => void) | undefined
+  watch(
+    viewer,
+    (v) => {
+      if (!v) return
+      void apply(v)
+      removeCameraListener = v.camera.moveEnd.addEventListener(scheduleWrite)
+      removeSelectionListener = v.selectedEntityChanged.addEventListener(scheduleWrite)
+    },
+    { immediate: true },
+  )
+
+  const layerState = computed(() => layers.entries.map((e) => e.on.value).join())
+  watch([layerState, tab, timeline.mode, timeline.days, timeline.index], scheduleWrite)
+  // A linked event can only be selected once it has loaded
+  watch(loaded, () => pendingEvent && trySelect())
+
+  onBeforeUnmount(() => {
+    clearTimeout(writeTimer)
+    removeCameraListener?.()
+    removeSelectionListener?.()
+  })
+
+  return { link, flush: write, initial }
+}

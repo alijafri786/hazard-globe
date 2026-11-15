@@ -20,6 +20,8 @@ The **Sea & space** tab shows **ships** worldwide (with an AISStream key, see be
 
 **Layers** (top of the panel) lists every layer in one place, to switch any of them on or off without hunting through the tabs; **Events only** switches off everything but the GDACS events. A **key** beside the panel explains the colours and shapes of whatever is on the globe, and leaves out layers hidden while looking back in History.
 
+**Share** copies a link to what you're looking at: the camera, the layers that are on, the selected event or earthquake, the tab, and the day when looking back. Opening the link shows the same view. It never includes your watch areas, alerts or searched places.
+
 **Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
 
 The **Weather** tab plays the last few hours of the world's **clouds** from satellite, shows the **wind** as moving particles, and gives the **temperature** and current conditions anywhere: pick a spot on the globe, use your location, or search for a place while the tab is open.
@@ -138,6 +140,16 @@ OPENSKY_CLIENT_SECRET=your-client-secret
 ## Controls
 
 Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger drag) to tilt. The buttons at the bottom right do the same with a click or press-and-hold, and the compass turns the view back to north. Keyboard: arrow keys pan, `+`/`-` zoom, `Q`/`E` rotate, `W`/`S` tilt.
+
+### Embedding
+
+Add `?embed=1` to a link to show just the globe and its key, with an "Open in Hazard Globe" link, for an `<iframe>`:
+
+```html
+<iframe src="https://your-site.example/?embed=1#layers=gdacs-TC,gdacs-FL" width="800" height="500" style="border:0" title="Hazard Globe"></iframe>
+```
+
+Whether other sites may embed your deployment is up to the web server that serves the app: it's a static site, so set `Content-Security-Policy: frame-ancestors` (or `X-Frame-Options`) there. With neither, any site can embed it.
 
 ## Notes and limits
 
