@@ -5,6 +5,7 @@ export type TimelineMode = 'live' | 'history'
 /** The ranges the server offers, each ending today */
 export const HISTORY_DAYS = [7, 30, 90] as const
 export type HistoryDays = (typeof HISTORY_DAYS)[number]
+export const isHistoryDays = (n: number): n is HistoryDays => (HISTORY_DAYS as readonly number[]).includes(n)
 
 const DAY = 86_400_000
 const startOfUtcDay = (t: number) => Math.floor(t / DAY) * DAY

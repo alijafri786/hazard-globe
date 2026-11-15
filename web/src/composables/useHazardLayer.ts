@@ -32,8 +32,8 @@ const RANK: Record<AlertLevel, number> = { Red: 2, Orange: 1, Green: 0 }
 const FOOTPRINT_NOTE: Partial<Record<HazardType, string>> = {
   TC: `Track: solid where it has been, dashed where it is forecast to go. The dashed white
     cone is where its centre is likely to go, not how big the storm is.`,
-  EQ: `Shaded: where shaking was strong (intensity VI or more), from the USGS ShakeMap. Where there is none yet,
-    a 100 km circle round the epicentre.`,
+  EQ: `Shaded: where shaking was strong (intensity VI or more), from the USGS ShakeMap. Before there is a
+    ShakeMap, a 100 km circle round the epicentre. No shading once there is one: nowhere shook that hard.`,
   VO: 'Shaded: the circle GDACS draws round the volcano, not a forecast of where ash or lava will go.',
 }
 
@@ -267,5 +267,6 @@ export function useHazardLayer(viewer: ShallowRef<Viewer | null>, timeline: Retu
   const timer = setInterval(() => timeline.mode.value === 'live' && void refresh(), 10 * 60_000)
   onBeforeUnmount(() => clearInterval(timer))
 
-  return { events: sorted, fetchedAt, days, loading, error, visible, refresh, flyTo }
+  /** every event loaded, shown or not */
+  return { events: sorted, all: events, fetchedAt, days, loading, error, visible, refresh, flyTo }
 }

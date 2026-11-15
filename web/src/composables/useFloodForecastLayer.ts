@@ -17,6 +17,13 @@ export const FORECAST_LAYERS = {
 } as const
 export type ForecastLayer = keyof typeof FORECAST_LAYERS
 
+/** GloFAS's own colours for the 2-, 5- and 20-year return periods */
+export const FLOOD_LEVELS = [
+  { colour: '#ffff00', label: '2-year' },
+  { colour: '#ff0000', label: '5-year' },
+  { colour: '#a020f0', label: '20-year' },
+] as const
+
 export const forecastCredit = () =>
   `Flood forecast generated using Copernicus Emergency Management Service information ${new Date().getUTCFullYear()}`
 

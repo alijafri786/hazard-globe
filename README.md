@@ -12,11 +12,17 @@ Select a cyclone to see its track (solid where it has been, dashed where it's fo
 
 Switch the Events tab to **History** to look back over the last 7, 30 or 90 days: drag the slider or press play to see which events were active on each day.
 
+Switch on **USGS earthquakes** to see every recent earthquake, live: magnitude 2.5 and over in the past day, or 4.5 and over in the past week, sized by magnitude and coloured by depth. Click one for its depth, USGS's impact estimate (PAGER) and, when GDACS reports the same earthquake, its GDACS alert.
+
 Turn on the **flood forecast** overlay to see where rivers are forecast to rise over the next 15 days, from the Copernicus Global Flood Awareness System (GloFAS). It's for information only, not a flood warning, and it doesn't trigger alerts.
 
 You can also switch on **live flights** to see aircraft worldwide, coloured by altitude, with their callsigns once you zoom in. Search by callsign or click a plane for its **flight details**: airline, where it's flying from and to, how far along it is and roughly how long it has left, the aircraft type and registration, and on the globe the path it has flown and the rest of its route.
 
 The **Sea & space** tab shows **ships** worldwide (with an AISStream key, see below), coloured by type, and **satellites** moving live: space stations, the brightest, navigation and weather satellites, Starlink, or all ~17,000 active ones, coloured by orbit. Find one by name or NORAD number, or click it, to see its height, speed and one full orbit.
+
+**Layers** (top of the panel) lists every layer in one place, to switch any of them on or off without hunting through the tabs; **Events only** switches off everything but the GDACS events. A **key** beside the panel explains the colours and shapes of whatever is on the globe, and leaves out layers hidden while looking back in History.
+
+**Share** copies a link to what you're looking at: the camera (on the globe, the flat map or Columbus view), the layers that are on (with the earthquake feed and satellite groups chosen), the selected event or earthquake, the tab, and the day when looking back. Opening the link shows the same view. It never includes your watch areas, alerts or searched places.
 
 **Search** (the magnifier at the top right) goes to any place by name, or to coordinates typed latitude first (`48.8566, 2.3522` or `51.5N 0.12W`), and drops a pin there.
 
@@ -40,6 +46,8 @@ NOAA NOMADS (GFS) ──(on demand, per 3 h forecast step)──▶ server (GRIB
 AISStream ──(WebSocket, open while in use)──▶ server ──▶ /api/ships ──▶ web (ships layer)
 
 CelesTrak ──(on demand, 2 h cache)──▶ server ──▶ /api/satellites/:group ──▶ web worker (SGP4) ──▶ satellites layer
+
+USGS ──(on demand, 2 min cache)──▶ server ──▶ /api/earthquakes ──▶ web (earthquakes layer)
 ```
 
 - **web/** — Vue 3 + TypeScript + CesiumJS (used directly, no wrapper library). Works with **no Cesium ion token** using the bundled Natural Earth imagery; add a token to get satellite imagery and terrain.
@@ -135,12 +143,22 @@ OPENSKY_CLIENT_SECRET=your-client-secret
 
 Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger drag) to tilt. The buttons at the bottom right do the same with a click or press-and-hold, and the compass turns the view back to north. Keyboard: arrow keys pan, `+`/`-` zoom, `Q`/`E` rotate, `W`/`S` tilt.
 
+### Embedding
+
+Add `?embed=1` to a link to show just the globe and its key, with an "Open in Hazard Globe" link, for an `<iframe>`:
+
+```html
+<iframe src="https://your-site.example/?embed=1#layers=gdacs-TC,gdacs-FL" width="800" height="500" style="border:0" title="Hazard Globe"></iframe>
+```
+
+Whether other sites may embed your deployment is up to the web server that serves the app: it's a static site, so set `Content-Security-Policy: frame-ancestors` (or `X-Frame-Options`) there. With neither, any site can embed it.
+
 ## Notes and limits
 
 - **iPhone/iPad:** web push only works after the site is added to the Home Screen (iOS 16.4+). Email and Telegram work anywhere.
 - **Channels:** a subscription can use any mix of browser, email and Telegram. If one stops working for good (browser permission revoked, mailbox rejected, bot blocked), it's removed; when none are left, so is the subscription.
 - **Alert logic:** each area is notified once per event, and again only if its alert level escalates (e.g. Orange → Red). When one event touches several of your areas, you get one notification naming them all. Moving an area's centre resets what it has already been told.
-- **What counts as a hit:** for a cyclone, the area its winds are expected to reach (GDACS's wind buffers), not its forecast cone or track. For an earthquake, where the USGS ShakeMap shows strong shaking (intensity VI or more), or a 100 km circle round the epicentre before there is one; earthquake alerts come after the event, as a prompt to check on people. For a volcano, the circle GDACS draws round it. For floods, wildfires and droughts, GDACS's affected area. The globe shades the same area the alerts use.
+- **What counts as a hit:** for a cyclone, the area its winds are expected to reach (GDACS's wind buffers), not its forecast cone or track. For an earthquake, where the USGS ShakeMap shows strong shaking (intensity VI or more), or a 100 km circle round the epicentre before there is one (a ShakeMap with no strong shaking anywhere alerts no one); earthquake alerts come after the event, as a prompt to check on people. For a volcano, the circle GDACS draws round it. For floods, wildfires and droughts, GDACS's affected area. The globe shades the same area the alerts use.
 - **Many small events:** GDACS lists hundreds of Green earthquakes and wildfires a week. The live view shows them all (each type can be hidden); History leaves their Green ones out, which would take dozens of requests and thousands of markers. Droughts are looked up over at least 40 days, because one can run for months between updates.
 - **Forecast-cone alerts:** opt-in per area. They're sent once per storm when its cone reaches the area, and again only if the storm's alert level rises. They're recorded separately, so the alert when the winds reach the area still comes. No cone alert is sent once an area has had that alert. The message says roughly when the storm passes closest, and that a cone is where the storm's centre is likely to go, not how big it is. Cones come from GDACS, so they cover every ocean basin.
 - **Early events:** GDACS sometimes has no footprint polygon yet; the server falls back to the event's point location.
@@ -155,6 +173,7 @@ Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger d
 - **Wind:** NOAA's GFS forecast model, 10 m above the ground, on its 1° grid (about 100 km), so it shows the large-scale flow, not local gusts. The server asks NOAA's NOMADS service for just the two wind fields (~160 KB), from the newest run likely published (GFS runs every 6 hours and takes about 4 to appear) at the 3-hourly forecast step nearest now, falling back to the run before; it fetches again only when a nearer step or newer run is due, and serves the last good grid meanwhile. GRIB2 is decoded by a small decoder in `server/src/weather/grib2.ts`, checked against ECMWF's ecCodes on NOAA's own file and on the same data in other packings (fixtures in `server/test/fixtures`). Browsers draw a few thousand particles on a canvas over the globe, the way earth.nullschool.net does, so the globe itself doesn't have to redraw every frame. Hidden in History mode.
 - **Weather:** current conditions come from [Open-Meteo](https://open-meteo.com), straight from the browser, with no key. They're weather-model values for a patch a few kilometres across, not a reading from the nearest station. Each spot is asked about at most once every 10 minutes per browser, and nothing is asked until someone checks a spot. Open-Meteo's free API is for non-commercial use (under 10,000 calls a day); a commercial deployment needs one of their paid plans.
 - **Ships:** AIS positions from AISStream.io, whose data comes from volunteers' receivers on land: busy coasts and shipping lanes are well covered, the open ocean hardly at all. The server opens one WebSocket when someone first switches ships on, subscribes to the whole world, and closes it after 30 minutes with nobody looking, dropping what it collected. Positions build up over the first few minutes as ships report, and the app says so. Snapshots are rebuilt every 2 minutes; ships not heard from for 30 minutes are dropped; between snapshots, browsers move each ship along its course. A ship's destination, size and status are fetched when it's selected. Destinations are typed in by crews and often out of date. Node's WebSocket asks for compression, which AISStream needs to avoid its bandwidth limits.
+- **USGS earthquakes:** from the [USGS real-time feeds](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php) (public domain, no key) through the server, which fetches each feed at most once every 2 minutes however many people are looking, and only while someone has the layer on. Quarry blasts and other non-earthquakes are left out. A USGS quake is matched to a GDACS one when they're within 50 km and 2 minutes of each other. USGS flags large earthquakes under the sea, but the flag doesn't mean a tsunami happened, and the card says so. Hidden in History mode.
 - **Satellites:** orbital elements come from [CelesTrak](https://celestrak.org) through the server, which fetches each group at most once every 2 hours however many people are looking (CelesTrak updates about that often and blocks clients that download more often), and keeps serving the last good copy if a refresh fails. Each browser then works out positions itself with SGP4 ([satellite.js](https://github.com/shashwatak/satellite-js)) in a Web Worker, once a second, good to a few kilometres. Starlink and "All active" are a few MB to download and tens of thousands of dots, so they're off until chosen. Hidden in History mode.
 - **Flight details:** the airline, route and aircraft come from [adsbdb](https://www.adsbdb.com), a free community database, looked up straight from the browser when you pick a plane. Routes are listed by callsign, which airlines reuse, so they can be out of date: if a plane is nowhere near the line between its listed airports, the card says so and draws no route. The path flown comes from OpenSky's track for that aircraft, which costs as many credits as a whole snapshot, so it's only offered with OpenSky credentials: the server works out how many tracks a day the credits left over from snapshots allow, keeps each for 5 minutes, and lets each IP ask for 30 a minute. Without one, the card shows a straight line from the departure airport and says it's a guess. "Time left" is the remaining distance at the current ground speed, so it's rough.
 - **OpenSky terms:** OpenSky data is free for research and non-commercial use. Check the terms of use on [opensky-network.org](https://opensky-network.org) before deploying commercially.

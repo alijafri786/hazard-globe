@@ -4,11 +4,14 @@ import AlertSetup from './components/AlertSetup.vue'
 import CameraControls from './components/CameraControls.vue'
 import EventList from './components/EventList.vue'
 import FlightPanel from './components/FlightPanel.vue'
+import LayerList from './components/LayerList.vue'
+import MapLegend from './components/MapLegend.vue'
 import SatellitePanel from './components/SatellitePanel.vue'
 import ShipPanel from './components/ShipPanel.vue'
 import WeatherPanel from './components/WeatherPanel.vue'
 import { useCameraControls } from './composables/useCameraControls'
 import { useCloudLayer } from './composables/useCloudLayer'
+import { useEarthquakeLayer } from './composables/useEarthquakeLayer'
 import { useFlightDetails } from './composables/useFlightDetails'
 import { useFlightLayer } from './composables/useFlightLayer'
 import { useFloodForecastLayer } from './composables/useFloodForecastLayer'
@@ -19,15 +22,18 @@ import { useSearchPin } from './composables/useSearchPin'
 import { useShipLayer } from './composables/useShipLayer'
 import { useTemperature } from './composables/useTemperature'
 import { formatDay, useTimeline } from './composables/useTimeline'
+import { useUrlState, type Tab } from './composables/useUrlState'
 import { useViewer } from './composables/useViewer'
 import { useWatchAreas } from './composables/useWatchAreas'
 import { useWindLayer } from './composables/useWindLayer'
+import { createLayerRegistry } from './layers/registry'
 
 const globeEl = ref<HTMLElement | null>(null)
 const viewer = useViewer(globeEl)
 const timeline = useTimeline()
 const hazards = useHazardLayer(viewer, timeline)
 const forecast = useFloodForecastLayer(viewer, timeline)
+const quakes = useEarthquakeLayer(viewer, timeline, hazards.all)
 const clouds = useCloudLayer(viewer, timeline)
 const wind = useWindLayer(viewer, timeline)
 const clicks = useGlobeClicks(viewer)
@@ -39,9 +45,52 @@ const watchAreas = useWatchAreas(viewer)
 const camera = useCameraControls(viewer)
 const search = useSearchPin(viewer)
 const temperature = useTemperature(viewer, timeline)
+const layers = createLayerRegistry({ hazards, forecast, quakes, clouds, wind, flights, ships, satellites, timeline })
+const layerListOpen = ref(false)
 
 const panelOpen = ref(true)
-const tab = ref<'events' | 'weather' | 'flights' | 'space' | 'alerts'>('events')
+const tab = ref<Tab>('events')
+const url = useUrlState({
+  viewer,
+  layers,
+  timeline,
+  tab,
+  loaded: computed(() => [hazards.all.value, quakes.quakes.value]),
+  quakeFeed: quakes.feed,
+  satelliteGroups: satellites.groups,
+})
+
+/** Shown inside another site's page: the globe and its key only, with a way out to the full app */
+const embedded = new URLSearchParams(location.search).has('embed')
+/** Built on the click, so it opens the view as it is now */
+function openFullApp() {
+  const u = new URL(url.link())
+  u.searchParams.delete('embed')
+  window.open(u.toString(), '_blank', 'noopener')
+}
+
+const shared = ref<string | null>(null)
+let sharedTimer: ReturnType<typeof setTimeout> | undefined
+async function share() {
+  url.flush()
+  const link = url.link()
+  const note = (text: string) => {
+    shared.value = text
+    clearTimeout(sharedTimer)
+    sharedTimer = setTimeout(() => (shared.value = null), 2500)
+  }
+  try {
+    // A phone's share sheet; on a computer, straight to the clipboard
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'Hazard Globe', url: link })
+    else {
+      await navigator.clipboard.writeText(link)
+      note('Link copied')
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return // closed the share sheet
+    window.prompt('Copy this link to share this view', link)
+  }
+}
 
 const picking = computed(() => watchAreas.picking.value || temperature.picking.value)
 
@@ -70,12 +119,28 @@ watch(search.found, (place) => {
   <div ref="globeEl" class="globe" />
   <CameraControls :controls="camera" />
 
-  <aside class="panel" :class="{ collapsed: !panelOpen }">
+  <a v-if="embedded" class="open-full" href="./" target="_blank" rel="noopener" @click.prevent="openFullApp()">
+    Open in Hazard Globe ↗
+  </a>
+
+  <aside v-if="!embedded" class="panel" :class="{ collapsed: !panelOpen }">
     <header class="panel-head">
-      <button class="grip" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
-        <strong>Hazard Globe</strong>
-        <span class="chev">{{ panelOpen ? '▾' : '▴' }}</span>
-      </button>
+      <div class="head-row">
+        <button class="grip" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
+          <strong>Hazard Globe</strong>
+          <span class="chev">{{ panelOpen ? '▾' : '▴' }}</span>
+        </button>
+        <button type="button" class="share-button" @click="share()">{{ shared ?? 'Share' }}</button>
+        <button
+          type="button"
+          class="layers-button"
+          :aria-expanded="layerListOpen"
+          aria-haspopup="dialog"
+          @click="layerListOpen = !layerListOpen"
+        >
+          Layers <span class="count">{{ layers.activeCount.value }}</span>
+        </button>
+      </div>
       <nav v-show="panelOpen" class="tabs" role="tablist">
         <button role="tab" :aria-selected="tab === 'events'" :class="{ on: tab === 'events' }" @click="tab = 'events'">
           Events
@@ -96,7 +161,7 @@ watch(search.found, (place) => {
     </header>
 
     <div v-show="panelOpen" class="panel-body">
-      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" />
+      <EventList v-if="tab === 'events'" :layer="hazards" :timeline="timeline" :forecast="forecast" :quakes="quakes" />
       <WeatherPanel
         v-else-if="tab === 'weather'"
         :weather="temperature"
@@ -119,6 +184,11 @@ watch(search.found, (place) => {
       </p>
     </div>
   </aside>
+
+  <!-- Outside the panel, placed against the screen: on a phone the panel is a bottom sheet, and folded
+       it has no room below its header -->
+  <LayerList v-if="layerListOpen && !embedded" :layers="layers" @close="layerListOpen = false" />
+  <MapLegend :layers="layers" :beside="panelOpen && !embedded" />
 
   <!-- So a past day is never mistaken for what is happening now -->
   <div v-if="timeline.mode.value === 'history' && !picking" class="history-badge" role="status">
@@ -161,10 +231,48 @@ watch(search.found, (place) => {
   padding: 12px 12px 0;
 }
 
+.head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.share-button,
+.layers-button {
+  flex: none;
+  padding: 3px 10px;
+  font-size: 13px;
+}
+
+.layers-button .count {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--line);
+  font-size: 11px;
+}
+
+.open-full {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  text-decoration: none;
+}
+
 .grip {
   all: unset;
   display: flex;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   justify-content: space-between;
   align-items: center;
   cursor: pointer;

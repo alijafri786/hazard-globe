@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  FLOOD_LEVELS,
   FORECAST_LAYERS,
   forecastCredit,
   GLOFAS_URL,
@@ -23,12 +24,7 @@ const issuedOn = computed(() => {
   return t === null ? null : formatDay(t)
 })
 
-// GloFAS's own colours for the 2-, 5- and 20-year return periods
-const LEVELS = [
-  { colour: '#ffff00', label: '2-year' },
-  { colour: '#ff0000', label: '5-year' },
-  { colour: '#a020f0', label: '20-year' },
-]
+const LEVELS = FLOOD_LEVELS
 </script>
 
 <template>

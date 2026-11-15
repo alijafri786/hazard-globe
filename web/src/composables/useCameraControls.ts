@@ -11,6 +11,7 @@ import {
   type Viewer,
 } from 'cesium'
 import { onBeforeUnmount, onMounted, ref, watch, type ShallowRef } from 'vue'
+import { cameraView } from '../services/camera'
 
 export type CameraAction =
   | 'zoomIn'
@@ -229,10 +230,8 @@ export function useCameraControls(viewer: ShallowRef<Viewer | null>) {
       if (!v) return
       v.scene.postRender.addEventListener(() => {
         // No heading while the globe morphs between 3D and 2D; asking for it in degrees then stopped rendering
-        const radians = v.camera.heading as number | undefined
-        if (radians === undefined) return
-        const h = CesiumMath.toDegrees(radians)
-        if (Math.abs(h - heading.value) > 0.5) heading.value = h
+        const view = cameraView(v)
+        if (view && Math.abs(view.heading - heading.value) > 0.5) heading.value = view.heading
       })
       v.scene.morphComplete.addEventListener(() => {
         is3D.value = v.scene.mode === SceneMode.SCENE3D

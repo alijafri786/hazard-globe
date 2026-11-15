@@ -4,6 +4,8 @@ import type {
   FlightsResponse,
   FlightTrack,
   HazardType,
+  QuakeFeed,
+  QuakesResponse,
   SatellitesResponse,
   ShipDetails,
   ShipsResponse,
@@ -58,6 +60,8 @@ export const api = {
   wind: () => request<WindGrid>('/api/weather/wind'),
 
   ship: (mmsi: number) => request<ShipDetails>(`/api/ships/${mmsi}`),
+
+  earthquakes: (feed: QuakeFeed) => request<QuakesResponse>(`/api/earthquakes?feed=${feed}`),
 
   satellites: (group: string) => request<SatellitesResponse>(`/api/satellites/${group}`),
 

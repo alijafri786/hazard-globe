@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { useEarthquakeLayer } from '../composables/useEarthquakeLayer'
 import type { useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { formatDay, type useTimeline } from '../composables/useTimeline'
 import { HAZARD_TYPES, HAZARDS, hazardSymbol } from '../hazards'
 import { ALERT_COLOURS } from '../types'
+import EarthquakeControls from './EarthquakeControls.vue'
 import FloodForecastControls from './FloodForecastControls.vue'
 import TimelineControls from './TimelineControls.vue'
 
@@ -12,6 +14,7 @@ const props = defineProps<{
   layer: ReturnType<typeof useHazardLayer>
   timeline: ReturnType<typeof useTimeline>
   forecast: ReturnType<typeof useFloodForecastLayer>
+  quakes: ReturnType<typeof useEarthquakeLayer>
 }>()
 const { events, fetchedAt, days, loading, error, visible, refresh, flyTo } = props.layer
 const { mode, day } = props.timeline
@@ -45,6 +48,7 @@ const empty = computed(() =>
     </div>
 
     <FloodForecastControls :forecast="forecast" :timeline="timeline" />
+    <EarthquakeControls :quakes="quakes" :timeline="timeline" />
 
     <div class="meta">
       <span v-if="mode === 'history' && !loading">

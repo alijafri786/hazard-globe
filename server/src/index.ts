@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer'
 import { createApp } from './app.js'
 import { config, pushEnabled } from './config.js'
 import { createDeliver, type Notifier, type Notifiers } from './delivery.js'
+import { createEarthquakes } from './earthquakes.js'
 import { createEmailNotifier, type EmailNotifier, type Mailer } from './email.js'
 import { createHistory } from './history.js'
 import { createPoller } from './poller.js'
@@ -57,6 +58,7 @@ const app = createApp({
   satellites: createSatellites(),
   flightTrack: createTracks(),
   wind: createWind(),
+  earthquakes: createEarthquakes(),
   // Never in end-to-end runs: they mustn't open a real stream
   ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
   deliver,

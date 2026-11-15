@@ -1,0 +1,134 @@
+{
+ "type": "FeatureCollection",
+ "metadata": {
+  "generated": 1794757976000,
+  "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson",
+  "title": "USGS Magnitude 4.5+ Earthquakes, Past Week",
+  "status": 200,
+  "api": "2.8.2",
+  "count": 5
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 5.5,
+    "place": "9 km E of Union, Philippines",
+    "time": 1794750095701,
+    "updated": 1794757730137,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tyek",
+    "alert": "green",
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 471,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 5.5 - 9 km E of Union, Philippines"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     126.2,
+     9.7595,
+     9.971
+    ]
+   },
+   "id": "us7000tyek"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 4.7,
+    "place": "130 km W of Tofino, Canada",
+    "time": 1794361527859,
+    "updated": 1794607371877,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000txfz",
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 1,
+    "sig": 340,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 4.7 - 130 km W of Tofino, Canada"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -127.6912,
+     49.0876,
+     10
+    ]
+   },
+   "id": "us7000txfz"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 4.7,
+    "place": "92 km NW of Houma, Tonga",
+    "time": 1794728197211,
+    "updated": 1794729489040,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tyd3",
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 340,
+    "magType": "mb",
+    "type": "earthquake",
+    "title": "M 4.7 - 92 km NW of Houma, Tonga"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -175.9354,
+     -20.589,
+     177.524
+    ]
+   },
+   "id": "us7000tyd3"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": 2.6,
+    "place": "92 km NW of Houma, Tonga",
+    "time": 1794728197211,
+    "updated": 1794729489040,
+    "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tyd3",
+    "alert": null,
+    "status": "reviewed",
+    "tsunami": 0,
+    "sig": 340,
+    "magType": "mb",
+    "type": "quarry blast",
+    "title": "M 2.6 Quarry Blast"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -175.9354,
+     -20.589,
+     177.524
+    ]
+   },
+   "id": "uu80000001"
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "mag": "big",
+    "type": "earthquake",
+    "time": 1
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     200,
+     10,
+     5
+    ]
+   },
+   "id": "bad1"
+  }
+ ]
+}

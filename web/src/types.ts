@@ -173,3 +173,31 @@ export const ALERT_COLOURS: Record<AlertLevel, string> = {
   Orange: '#f5a524',
   Green: '#46a758',
 }
+
+/** USGS PAGER alert level: estimated impact on people and the economy */
+export type PagerAlert = 'green' | 'yellow' | 'orange' | 'red'
+
+/** One earthquake from the USGS real-time feeds (see server/src/earthquakes.ts) */
+export interface Quake {
+  id: string
+  lon: number
+  lat: number
+  depthKm: number
+  mag: number
+  /** epoch ms */
+  time: number
+  place: string
+  url: string
+  /** USGS's flag for a large event in an ocean region; not a sign a tsunami happened */
+  tsunami: boolean
+  alert: PagerAlert | null
+}
+
+export type QuakeFeed = 'day' | 'week'
+
+export interface QuakesResponse {
+  feed: QuakeFeed
+  fetchedAt: string
+  generatedAt: string | null
+  quakes: Quake[]
+}
