@@ -7,3 +7,5 @@ server/data/
 .DS_Store
 test-results/
 playwright-report/
+.wrangler/
+.dev.vars

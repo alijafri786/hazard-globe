@@ -1,10 +1,21 @@
 {
-  // Deploys only the web app (web/dist) as static assets on Cloudflare Workers.
-  // The API server (server/) is a long-running Node process and is hosted separately;
-  // point the web build at it with the VITE_API_BASE build variable.
+  // Serves the web app (web/dist) on Cloudflare Workers. Requests to /api/* run worker/index.ts first,
+  // which forwards them to the Hazard Globe server at API_ORIGIN; everything else is a static asset.
+  // The server itself is a long-running Node process and is hosted separately.
   "name": "hazard-globe",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-11-01",
   "assets": {
-    "directory": "./web/dist"
-  }
+    "directory": "./web/dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  // API_ORIGIN (your server's origin, e.g. https://api.example.org) is set in the dashboard under
+  // Settings > Variables and Secrets, not here, so each deployment can point at its own server.
+  // keep_vars stops deploys from wiping it. Until it's set, /api/* answers 503.
+  "keep_vars": true,
+  // Required by `wrangler preview`, which Cloudflare runs to build a Preview for each branch and pull
+  // request. Previews don't inherit production variables, so their /api/* answers 503 unless you give
+  // them an API_ORIGIN, e.g. "previews": { "vars": { "API_ORIGIN": "https://staging-api.example.org" } }.
+  "previews": {}
 }

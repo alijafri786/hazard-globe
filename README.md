@@ -171,15 +171,20 @@ OPENSKY_CLIENT_SECRET=your-client-secret
 
 ## Deploying the web app to Cloudflare
 
-`wrangler.jsonc` deploys the built web app (`web/dist`) as static assets on Cloudflare Workers. It covers the web app only: the server is a long-running Node process (poller, subscription store, alert delivery), so host it separately and point the web app at it.
+`wrangler.jsonc` serves the built web app (`web/dist`) from Cloudflare Workers. Requests to `/api/*` go through a small Worker (`worker/index.ts`) that forwards them to your server, so the app calls its API on its own origin: no `VITE_API_BASE`, no CORS, and you can move the server without rebuilding. The server itself is a long-running Node process (poller, subscription store, alert delivery), so host it separately.
 
 In the Cloudflare dashboard, import the repository as a Worker and set:
 
 - **Build command:** `npm run build --workspace web`
 - **Deploy command:** `npx wrangler deploy`
-- **Build variables:** `VITE_API_BASE` (your server's URL, no trailing slash), `VITE_CESIUM_ION_TOKEN` (optional, see above) and `NODE_VERSION=22`. Vite builds these into the app, so they must be build variables, not runtime ones.
+- **Build variables:** `NODE_VERSION=22`, and `VITE_CESIUM_ION_TOKEN` if you use one (see above). Vite builds these into the app, so they must be build variables.
+- **Runtime variable** (Settings > Variables and Secrets): `API_ORIGIN`, your server's origin, e.g. `https://api.example.org`. Until it's set, `/api/*` answers 503. Deploys keep it (`keep_vars`).
 
-On the server, set `WEB_ORIGIN` to the web app's origin for CORS. Set `PUBLIC_URL` to the separately hosted API server's public URL (the same base URL as `VITE_API_BASE`), since email confirmation and unsubscribe links use its `/api/email/...` routes.
+On the server, set `TRUST_PROXY=1` (add one for each proxy in front of the server itself, such as nginx) so rate limits see visitors' addresses, and set `WEB_ORIGIN` and `PUBLIC_URL` to the app's address. Email confirmation and unsubscribe links use the server's `/api/email/...` routes, which the Worker forwards, so they work on the app's address too. The Worker replaces any `X-Forwarded-For` a browser sends with the address Cloudflare saw. Anyone who calls your server directly can still send their own, though, so keep the server reachable only through the Worker if rate limits matter to you.
+
+To try the Worker locally, start the server (`npm run dev --workspace server`, on port 8787), build the web app, put `API_ORIGIN=http://localhost:8787` in `.dev.vars`, and run `npx wrangler dev --port 8788`. Wrangler also defaults to port 8787, so without `--port` it would take the server's port and send `/api/*` back to itself.
+
+Cloudflare also builds a Preview for each branch and pull request. Previews don't inherit production variables, so their `/api/*` answers 503 until you give them an `API_ORIGIN` in the `previews` block of `wrangler.jsonc`.
 
 ## Controls
 
