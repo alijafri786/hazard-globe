@@ -67,7 +67,9 @@ test('the address follows the view, and never holds watch areas', async ({ page 
   await page.getByLabel('Name').fill('Secret home')
   await page.getByRole('button', { name: 'Add area', exact: true }).click()
   await expect.poll(() => hash(page)).toContain('tab=alerts')
-  expect(decodeURIComponent(hash(page))).not.toMatch(/Secret|home|51\.5|radius/i)
+  // The camera may have flown there, and the view is in the link; nothing else about the area is
+  const rest = decodeURIComponent(hash(page)).replace(/(^#|&)cam=[^&]*/, '')
+  expect(rest).not.toMatch(/Secret|home|51\.5|radius/i)
 })
 
 test('a malformed link is ignored, not obeyed', async ({ page }) => {
