@@ -12,7 +12,7 @@
 # the server is only reached through Caddy. Running the script again pulls the latest code and restarts.
 set -euo pipefail
 
-: "${APP_ORIGIN:?Set APP_ORIGIN to the web app's address, e.g. https://hazard-globe.example.workers.dev}"
+: "${APP_ORIGIN:?Set APP_ORIGIN to the web app address, e.g. https://hazard-globe.example.workers.dev}"
 APP_ORIGIN=${APP_ORIGIN%/}
 REPO=${REPO:-https://github.com/alijafri786/hazard-globe}
 BRANCH=${BRANCH:-main}
