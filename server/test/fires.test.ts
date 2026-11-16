@@ -109,6 +109,24 @@ describe('createFires', () => {
     expect(fetchText).toHaveBeenCalledTimes(2)
   })
 
+  it('says FIRMS is unavailable, rather than that the box is too big, when it has never answered', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fires = createFires({ mapKey: 'k', fetchText: async () => Promise.reject(new Error('down')), now: () => NOW })
+    await expect(fires.inBox([130, -13, 131, -12])).rejects.toThrow('FIRMS unavailable')
+  })
+
+  it('alerts check the copy just fetched, not the one before', async () => {
+    let t = NOW
+    let calls = 0
+    // the same fires, and a second lot like them far away
+    const later = [csv, row(-30, 150, at(1), 'n', 5), row(-30, 150.01, at(1), 'n', 6), row(-30, 150.02, at(2), 'n', 7)].join('\n')
+    const fetchText = vi.fn(async (_url: string) => (++calls <= 2 ? csv : later))
+    const fires = createFires({ mapKey: 'k', fetchText, now: () => t })
+    expect(await fires.items(true)).toHaveLength(1)
+    t += 30 * 60_000 // the next round, as the copy expires
+    expect(await fires.items(true)).toHaveLength(2)
+  })
+
   it('asks FIRMS for alerts only when an area wants them', async () => {
     const fetchText = vi.fn(async (_url: string) => csv)
     const fires = createFires({ mapKey: 'k', fetchText, now: () => NOW })

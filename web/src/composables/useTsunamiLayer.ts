@@ -40,6 +40,13 @@ function describeMessage(m: TsunamiMessage): string {
     American coasts. Not an official warning: follow your local authorities.</p>`
 }
 
+/** How long ago a reading was, roughly: "now" within 10 minutes */
+function ago(t: number, now = Date.now()): string {
+  const min = Math.round((now - t) / 60_000)
+  if (min < 10) return 'now'
+  return min < 90 ? `${min} min ago` : `${Math.round(min / 60)} h ago`
+}
+
 /** The last day's water height as a line, in cm against its mean: a tsunami shows as a sudden swing */
 export function dartChart(r: DartReadings): string {
   if (r.readings.length < 2) return '<p>No readings in the last day.</p>'
@@ -56,14 +63,17 @@ export function dartChart(r: DartReadings): string {
   const y = (v: number) => P.t + (1 - (v - lo) / Math.max(1e-6, hi - lo)) * (H - P.t - P.b)
   const points = r.readings.map((rd, i) => `${x(Date.parse(rd.time)).toFixed(1)},${y(cm[i]).toFixed(1)}`).join(' ')
   const fmt = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)} cm`
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Water height over the last day, ${fmt(lo)} to ${fmt(hi)} about its average">
+  // the ends are the first and last readings, which a late or patchy buoy leaves short of a day, or of now
+  const from = ago(t0)
+  const to = ago(t1)
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Water height from ${from} to ${to}, ${fmt(lo)} to ${fmt(hi)} about its average">
     <line x1="${P.l}" x2="${W - P.r}" y1="${y(hi)}" y2="${y(hi)}" stroke="rgba(128,128,128,.25)" stroke-width="1"/>
     <line x1="${P.l}" x2="${W - P.r}" y1="${y(lo)}" y2="${y(lo)}" stroke="rgba(128,128,128,.25)" stroke-width="1"/>
     <text x="${P.l - 4}" y="${y(hi) + 3}" text-anchor="end" font-size="9" fill="currentColor">${fmt(hi)}</text>
     <text x="${P.l - 4}" y="${y(lo) + 3}" text-anchor="end" font-size="9" fill="currentColor">${fmt(lo)}</text>
     <polyline points="${points}" fill="none" stroke="${DART_COLOUR}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <text x="${P.l}" y="${H - 3}" font-size="9" fill="currentColor">24 h ago</text>
-    <text x="${W - P.r}" y="${H - 3}" text-anchor="end" font-size="9" fill="currentColor">now</text>
+    <text x="${P.l}" y="${H - 3}" font-size="9" fill="currentColor">${from}</text>
+    <text x="${W - P.r}" y="${H - 3}" text-anchor="end" font-size="9" fill="currentColor">${to}</text>
   </svg>`
 }
 
@@ -86,6 +96,8 @@ export function useTsunamiLayer(viewer: ShallowRef<Viewer | null>, timeline: Ret
   const enabled = ref(false)
   const buoysOn = ref(false)
   const messages = shallowRef<TsunamiMessage[]>([])
+  /** Now, as of the last round: so a warning leaves the banner at 12 hours even when fetches start failing */
+  const clock = ref(Date.now())
   const error = ref<string | null>(null)
 
   const rings = new CustomDataSource('tsunami-messages')
@@ -100,7 +112,7 @@ export function useTsunamiLayer(viewer: ShallowRef<Viewer | null>, timeline: Ret
     const newest = new Map<string, TsunamiMessage>()
     for (const m of messages.value) if (!newest.has(m.event)) newest.set(m.event, m) // newest first
     return [...newest.values()].filter(
-      (m) => (m.type === 'warning' || m.type === 'threat') && Date.now() - Date.parse(m.issuedAt) < ACTIVE_MS,
+      (m) => (m.type === 'warning' || m.type === 'threat') && clock.value - Date.parse(m.issuedAt) < ACTIVE_MS,
     )
   })
 
@@ -166,6 +178,7 @@ export function useTsunamiLayer(viewer: ShallowRef<Viewer | null>, timeline: Ret
   }
 
   async function load() {
+    clock.value = Date.now()
     if (!live()) return
     try {
       messages.value = (await api.tsunami()).messages

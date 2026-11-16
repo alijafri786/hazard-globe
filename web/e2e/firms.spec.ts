@@ -64,7 +64,8 @@ test('close up, single fires with their power', async ({ page }) => {
 
 test('with a FIRMS key, a watch area can ask about fires nearby', async ({ page }) => {
   await stubHazardData(page)
-  await page.route(/\/api\/channels/, (r) => r.fulfill({ json: { push: true, email: false, telegram: null, fires: true } }))
+  let fires = true
+  await page.route(/\/api\/channels/, (r) => r.fulfill({ json: { push: true, email: false, telegram: null, fires } }))
   await page.goto('/')
   await page.getByRole('tab', { name: 'My alerts' }).click()
   await page.getByRole('button', { name: '+ Add area' }).click()
@@ -73,4 +74,18 @@ test('with a FIRMS key, a watch area can ask about fires nearby', async ({ page 
   await page.getByLabel('Name').fill('Darwin')
   await page.getByRole('button', { name: 'Add area', exact: true }).click()
   await expect(page.getByRole('listitem').filter({ hasText: 'Darwin' })).toContainText('Storms, floods and fires nearby')
+
+  // The server loses its key: the area's fire alerts still show when editing, so they can be taken off
+  fires = false
+  await page.reload()
+  await page.getByRole('tab', { name: 'My alerts' }).click()
+  await page.getByRole('button', { name: 'Edit' }).click()
+  const fireBox = page.locator('form.editor').getByLabel('Fires nearby')
+  await expect(fireBox).toBeChecked()
+  await fireBox.uncheck()
+  await page.getByRole('button', { name: 'Save area' }).click()
+  await expect(page.getByRole('listitem').filter({ hasText: 'Darwin' })).not.toContainText('fires nearby')
+  // and new areas aren't offered them
+  await page.getByRole('button', { name: '+ Add area' }).click()
+  await expect(page.locator('form.editor').getByLabel('Fires nearby')).toHaveCount(0)
 })

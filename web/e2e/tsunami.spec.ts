@@ -41,6 +41,24 @@ test('a warning in force shows across the top, with the bulletin, layer on or no
   await expect(page.locator('.tsunami .messages li').first()).toContainText('Warning: OFF THE EAST COAST OF HONSHU')
 })
 
+test('a warning leaves the banner at 12 hours, even when tsunami.gov stops answering', async ({ page }) => {
+  await stubHazardData(page)
+  let up = true
+  const messages = [message({ type: 'warning', region: 'OFF THE EAST COAST OF HONSHU', issuedAt: iso(12 * H - 3 * 60_000) })]
+  await page.route(/\/api\/tsunami/, (r) =>
+    up
+      ? r.fulfill({ json: { fetchedAt: new Date().toISOString(), messages } })
+      : r.fulfill({ status: 503, json: { error: 'tsunami.gov unavailable, try again shortly' } }),
+  )
+  await page.clock.install()
+  await page.goto('/')
+  await expect(banner(page)).toContainText('Tsunami warning: OFF THE EAST COAST OF HONSHU.')
+
+  up = false
+  await page.clock.fastForward(5 * 60_000) // two rounds, both failing, past the 12 hours
+  await expect(banner(page)).toHaveCount(0)
+})
+
 test('no banner once the warning is cancelled, nor for information alone', async ({ page }) => {
   await stub(page, [
     message({ id: 'urn:uuid:3', event: 'PHEB-7', type: 'cancellation', issuedAt: iso(H) }), // newest first
@@ -84,7 +102,8 @@ test('a DART buoy’s card shows its last day of water height, and when it has t
   await expect(page.locator('.cesium-infoBox-title')).toHaveText('DART buoy 21415')
   const card = page.frameLocator('.cesium-infoBox-iframe')
   await expect(card.getByText('In event mode:')).toBeVisible()
-  await expect(card.getByRole('img', { name: /Water height over the last day/ })).toBeVisible()
+  // its ends are when the first and last readings were: a day ago, and a quarter of an hour ago
+  await expect(card.getByRole('img', { name: /^Water height from 24 h ago to 1[5-7] min ago,/ })).toBeVisible()
 })
 
 test('a watch area can ask for tsunami messages, and is told what they cover', async ({ page }) => {

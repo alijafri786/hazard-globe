@@ -63,8 +63,20 @@ export function createCachedSource<K, V>({
     return entry.value ?? null
   }
 
+  /**
+   * Like get, but when a refresh is due (or under way) waits for it rather than answering with the old copy:
+   * for pollers that run as often as the copy expires, which would otherwise always see the one before.
+   */
+  async function getFresh(key: K): Promise<V | null> {
+    const entry = entryFor(key)
+    if (!entry.inflight && now() >= entry.nextAttemptAt) refresh(key, entry)
+    if (entry.inflight) await entry.inflight
+    return entry.value?.data ?? null
+  }
+
   return {
     getWithTime,
+    getFresh,
     get: async (key: K): Promise<V | null> => (await getWithTime(key))?.data ?? null,
     /** What is cached now, without fetching */
     peek: (key: K): V | null => cache.get(key)?.value?.data ?? null,

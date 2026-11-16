@@ -240,14 +240,17 @@ export function createFires({
         data: Buffer.from(s.grid.buffer, s.grid.byteOffset, s.grid.byteLength).toString('base64'),
       }
     },
+    /** Fires in a box, or null when the box is too big; throws when FIRMS has never answered */
     inBox: async (box: [number, number, number, number]) => {
       const s = await source.get('world')
-      return s ? inBox(s, box) : null
+      if (!s) throw new Error('FIRMS unavailable')
+      return inBox(s, box)
     },
     /** For the alert poller: nothing, without fetching, when no area wants fire alerts */
     items: async (wanted: boolean): Promise<AlertItem[]> => {
       if (!wanted) return []
-      const s = await source.get('world')
+      // the poller runs as often as the copy expires: wait for the new one, or each round checks the last
+      const s = await source.getFresh('world')
       return s ? fireItems(s, staticCells(), now()) : []
     },
   }
