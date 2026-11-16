@@ -1,5 +1,11 @@
 import type {
   AuroraGrid,
+  FireDetection,
+  FireGrid,
+  DartReadings,
+  DartStation,
+  TsunamiMessage,
+  EventReports,
   ChannelView,
   SpaceWeatherSummary,
   ClimatologyInfo,
@@ -77,6 +83,32 @@ export const api = {
 
   climatologyNear: (lon: number, lat: number, radiusKm: number) =>
     request<PlaceClimatology>(`/api/climatology/near?lon=${lon}&lat=${lat}&radiusKm=${radiusKm}`),
+
+  /** Null when the server has no ReliefWeb app name set up */
+  reports: (q: { type: HazardType; glide?: string; iso3?: string; date?: string }) => {
+    const params = new URLSearchParams({ type: q.type })
+    for (const k of ['glide', 'iso3', 'date'] as const) if (q[k]) params.set(k, q[k]!)
+    return request<EventReports>(`/api/reports?${params}`).catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 501) return null
+      throw err
+    })
+  },
+
+  /** Null when the server has no FIRMS key */
+  firesGrid: () =>
+    request<FireGrid>('/api/fires/grid').catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 501) return null
+      throw err
+    }),
+
+  fires: (box: [number, number, number, number]) =>
+    request<{ detections: FireDetection[] }>(`/api/fires?bbox=${box.map((v) => v.toFixed(3)).join(',')}`),
+
+  tsunami: () => request<{ fetchedAt: string; messages: TsunamiMessage[] }>('/api/tsunami'),
+
+  dartStations: () => request<{ stations: DartStation[] }>('/api/dart'),
+
+  dartReadings: (id: string) => request<DartReadings>(`/api/dart/${encodeURIComponent(id)}`),
 
   aurora: () => request<AuroraGrid>('/api/space/aurora'),
 

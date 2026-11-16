@@ -88,9 +88,9 @@ const emailOf = async (id: string) => (await stored(id)).channels.find((c): c is
 
 describe('GET /api/channels', () => {
   it('lists the ways this server can notify people', async () => {
-    expect(await (await setup().app.request('/api/channels')).json()).toEqual({ push: true, email: true, telegram: { bot: 'hg_bot' } })
+    expect(await (await setup().app.request('/api/channels')).json()).toEqual({ push: true, email: true, telegram: { bot: 'hg_bot' }, fires: false })
     const bare = setup({}, { email: undefined, telegramBot: undefined, pushEnabled: false }).app
-    expect(await (await bare.request('/api/channels')).json()).toEqual({ push: false, email: false, telegram: null })
+    expect(await (await bare.request('/api/channels')).json()).toEqual({ push: false, email: false, telegram: null, fires: false })
   })
 })
 
@@ -592,5 +592,98 @@ describe('space weather routes', () => {
     aurora.mockResolvedValueOnce(null as never)
     expect((await setup({}, { spaceWeather: { aurora, summary } }).app.request('/api/space/aurora')).status).toBe(503)
     expect((await setup().app.request('/api/space/summary')).status).toBe(503)
+  })
+})
+
+describe('GET /api/reports', () => {
+  const reliefweb = vi.fn<NonNullable<AppDeps['reliefweb']>>(async () => ({
+    disaster: { name: 'Earthquake', url: 'https://reliefweb.int/disaster/x' },
+    reports: [],
+  }))
+
+  it('passes what it was asked on, checked', async () => {
+    const { app } = setup({}, { reliefweb })
+    const ok = await app.request('/api/reports?type=EQ&glide=EQ-2026-000186-VUT&iso3=VUT&date=2026-10-08')
+    expect(ok.status).toBe(200)
+    expect(reliefweb).toHaveBeenLastCalledWith({ type: 'EQ', glide: 'EQ-2026-000186-VUT', iso3: 'VUT', date: '2026-10-08' })
+    for (const q of ['type=XX', 'type=EQ&glide=nope', 'type=EQ&iso3=vu', 'type=EQ&date=8 Oct']) {
+      expect((await app.request(`/api/reports?${q}`)).status).toBe(400)
+    }
+  })
+
+  it('says when ReliefWeb is not set up, or failed', async () => {
+    expect((await setup().app.request('/api/reports?type=EQ')).status).toBe(501)
+    reliefweb.mockRejectedValueOnce(new Error('ReliefWeb 503'))
+    expect((await setup({}, { reliefweb }).app.request('/api/reports?type=EQ&iso3=VUT&date=2026-10-08')).status).toBe(503)
+  })
+})
+
+describe('tsunami and DART routes', () => {
+  const message = {
+    id: 'urn:uuid:1',
+    centre: 'PTWC' as const,
+    event: 'PHEB-1',
+    type: 'warning' as const,
+    issuedAt: '2026-11-15T10:00:00.000Z',
+    region: 'Somewhere',
+    lat: 0,
+    lon: 0,
+    magnitude: 7.8,
+    url: 'https://www.tsunami.gov/events/x',
+  }
+
+  it('reads the feeds again only when its copy is stale', async () => {
+    let fetchedAt: string | null = null
+    const tsunami = {
+      poll: vi.fn(async () => ((fetchedAt = new Date(Date.parse('2026-11-15T12:00:00Z')).toISOString()), [message])),
+      recent: () => [message],
+      fetchedAt: () => fetchedAt,
+    }
+    let t = Date.parse('2026-11-15T12:00:00Z')
+    const { app } = setup({ now: () => t }, { tsunami })
+    expect(await (await app.request('/api/tsunami')).json()).toMatchObject({ messages: [{ type: 'warning' }] })
+    t += 2 * 60_000
+    await app.request('/api/tsunami')
+    expect(tsunami.poll).toHaveBeenCalledOnce()
+    t += 2 * 60_000
+    await app.request('/api/tsunami')
+    expect(tsunami.poll).toHaveBeenCalledTimes(2)
+  })
+
+  it('serves the buoys and a buoy’s readings, checking its id', async () => {
+    const dart = {
+      stations: async () => [{ id: '21415', name: 'Attu', lat: 50, lon: 171 }],
+      readings: vi.fn(async (id: string) => (id === '21415' ? { id, readings: [], eventMode: false } : null)),
+    }
+    const { app } = setup({}, { dart })
+    expect((await (await app.request('/api/dart')).json()).stations).toHaveLength(1)
+    expect((await app.request('/api/dart/21415')).status).toBe(200)
+    expect((await app.request('/api/dart/99999')).status).toBe(404)
+    expect((await app.request('/api/dart/..%2Fetc')).status).toBe(400)
+  })
+})
+
+describe('fire routes', () => {
+  const fires = {
+    grid: vi.fn(async () => ({ fetchedAt: '2026-11-15T12:00:00.000Z', count: 0, cols: 1440, rows: 720, data: '' })),
+    inBox: vi.fn(async (box: [number, number, number, number]) => (box[2] - box[0] > 10 ? null : [])),
+  }
+
+  it('says when there is no FIRMS key, and tells the alert screen', async () => {
+    const { app } = setup()
+    expect((await app.request('/api/fires/grid')).status).toBe(501)
+    expect((await (await app.request('/api/channels')).json()).fires).toBe(false)
+    expect((await (await setup({}, { fires }).app.request('/api/channels')).json()).fires).toBe(true)
+  })
+
+  it('serves the grid, and single fires in a small box only', async () => {
+    const { app } = setup({}, { fires })
+    expect((await app.request('/api/fires/grid')).status).toBe(200)
+    expect((await app.request('/api/fires?bbox=130,-13,131,-12')).status).toBe(200)
+    expect(fires.inBox).toHaveBeenLastCalledWith([130, -13, 131, -12])
+    expect((await app.request('/api/fires?bbox=0,0,20,5')).status).toBe(400)
+    for (const q of ['bbox=1,2,3', 'bbox=a,b,c,d', 'bbox=0,95,1,96', 'bbox=200,0,201,1', '']) {
+      expect((await app.request(`/api/fires?${q}`)).status).toBe(400)
+    }
   })
 })

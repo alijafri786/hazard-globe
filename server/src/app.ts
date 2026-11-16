@@ -10,6 +10,10 @@ import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
 import type { Climatology } from './climatology/index.js'
 import { isStormClass, SLICES, STORM_CLASSES } from './climatology/model.js'
+import type { Dart } from './dart.js'
+import type { Fires } from './fires.js'
+import { isGlide, type ReliefWeb } from './reliefweb.js'
+import type { TsunamiWatch } from './tsunami.js'
 import type { SpaceWeather } from './spaceWeather.js'
 import { isQuakeFeed, QUAKE_FEEDS, type QuakeFeed, type QuakesSnapshot } from './earthquakes.js'
 import { fetchGeometryCollection } from './gdacs.js'
@@ -48,6 +52,14 @@ export interface AppDeps {
   wind: () => Promise<WindGrid | null>
   /** How often storms pass each place, from IBTrACS (see climatology/); null when it hasn't been built */
   climatology?: Climatology | null
+  /** Live fires from NASA FIRMS (see fires.ts); present when a map key is set */
+  fires?: Pick<Fires, 'grid' | 'inBox'>
+  /** Tsunami messages from NOAA's warning centres (see tsunami.ts) */
+  tsunami?: Pick<TsunamiWatch, 'poll' | 'recent' | 'fetchedAt'>
+  /** DART tsunami buoys (see dart.ts) */
+  dart?: Pick<Dart, 'stations' | 'readings'>
+  /** ReliefWeb reports for an event (see reliefweb.ts); present when an app name is set */
+  reliefweb?: ReliefWeb
   /** Aurora forecast and the Kp index from NOAA SWPC (see spaceWeather.ts) */
   spaceWeather?: Pick<SpaceWeather, 'aurora' | 'summary'>
   /** USGS earthquakes by feed (see earthquakes.ts) */
@@ -143,7 +155,13 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
 
   /** Which ways of being notified this server offers */
   app.get('/api/channels', (c) =>
-    c.json({ push: deps.pushEnabled, email: Boolean(email), telegram: telegramBot ? { bot: telegramBot } : null }),
+    c.json({
+      push: deps.pushEnabled,
+      email: Boolean(email),
+      telegram: telegramBot ? { bot: telegramBot } : null,
+      // fire alerts need a FIRMS key
+      fires: Boolean(deps.fires),
+    }),
   )
 
   app.get('/api/events', async (c) => {
@@ -273,6 +291,75 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     }
     c.header('Cache-Control', 'public, max-age=3600')
     return c.json(deps.climatology.near(lon, lat, radiusKm))
+  })
+
+  // Asked only when someone opens an event's card; every new answer costs two ReliefWeb requests
+  app.get('/api/reports', rateLimit({ windowMs: MINUTE, max: 30, key: byIp, now }), async (c) => {
+    if (!deps.reliefweb) return c.json({ error: "ReliefWeb reports aren't set up on this server" }, 501)
+    const type = c.req.query('type') ?? ''
+    const glide = c.req.query('glide') || undefined
+    const iso3 = c.req.query('iso3') || undefined
+    const date = c.req.query('date') || undefined
+    if (!isHazardType(type)) return c.json({ error: 'unsupported hazard type' }, 400)
+    if ((glide && !isGlide(glide)) || (iso3 && !/^[A-Z]{3}$/.test(iso3)) || (date && !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
+      return c.json({ error: 'glide, iso3 or date is malformed' }, 400)
+    }
+    const answer = await deps.reliefweb({ type, glide, iso3, date }).catch(() => null)
+    if (!answer) return c.json({ error: 'ReliefWeb unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=1800')
+    return c.json(answer)
+  })
+
+  const noFires = { error: "Live fires aren't set up on this server" }
+
+  // A day's fires on a 0.25° grid: 2 MB of counts, nearly all zeros, so base64 in compressed JSON is small
+  app.get('/api/fires/grid', compress(), async (c) => {
+    if (!deps.fires) return c.json(noFires, 501)
+    const grid = await deps.fires.grid().catch(() => null)
+    if (!grid) return c.json({ error: 'FIRMS unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=600')
+    return c.json(grid)
+  })
+
+  app.get('/api/fires', rateLimit({ windowMs: MINUTE, max: 60, key: byIp, now }), compress(), async (c) => {
+    if (!deps.fires) return c.json(noFires, 501)
+    const box = (c.req.query('bbox') ?? '').split(',').map(Number)
+    const ok = box.length === 4 && box.every(Number.isFinite) && Math.abs(box[1]) <= 90 && Math.abs(box[3]) <= 90
+    if (!ok || box.some((v, i) => (i % 2 === 0 ? Math.abs(v) > 180 : false))) {
+      return c.json({ error: 'bbox must be west,south,east,north in degrees' }, 400)
+    }
+    const found = await deps.fires.inBox(box as [number, number, number, number]).catch(() => undefined)
+    if (found === undefined) return c.json({ error: 'FIRMS unavailable, try again shortly' }, 503)
+    if (found === null) return c.json({ error: 'bbox is bigger than 10° by 10°: zoom in for single fires' }, 400)
+    c.header('Cache-Control', 'public, max-age=600')
+    return c.json({ detections: found })
+  })
+
+  // The alert poller reads the feeds every 2 minutes; only a stale copy (or none, in tests) is read again here
+  app.get('/api/tsunami', async (c) => {
+    const t = deps.tsunami
+    if (!t) return c.json({ error: 'Tsunami messages unavailable' }, 503)
+    const at = t.fetchedAt()
+    if (!at || now() - Date.parse(at) > 3 * MINUTE) await t.poll().catch(() => null)
+    if (!t.fetchedAt()) return c.json({ error: 'tsunami.gov unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=60')
+    return c.json({ fetchedAt: t.fetchedAt(), messages: t.recent() })
+  })
+
+  app.get('/api/dart', compress(), async (c) => {
+    const stations = await deps.dart?.stations().catch(() => null)
+    if (!stations) return c.json({ error: 'DART buoys unavailable, try again shortly' }, 503)
+    c.header('Cache-Control', 'public, max-age=3600')
+    return c.json({ stations })
+  })
+
+  app.get('/api/dart/:id', rateLimit({ windowMs: MINUTE, max: 60, key: byIp, now }), compress(), async (c) => {
+    const id = c.req.param('id')
+    if (!/^[A-Za-z0-9]{3,8}$/.test(id)) return c.json({ error: 'bad buoy id' }, 400)
+    const readings = await deps.dart?.readings(id).catch(() => null)
+    if (!readings) return c.json({ error: 'No readings for that buoy' }, 404)
+    c.header('Cache-Control', 'public, max-age=300')
+    return c.json(readings)
   })
 
   const noSpaceWeather = { error: 'Space weather unavailable, try again shortly' }

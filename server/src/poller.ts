@@ -1,10 +1,11 @@
 import { coneKey, eventKey, planAlerts } from './alerts.js'
 import { config } from './config.js'
-import { anySent, sameChannel, type Deliver } from './delivery.js'
+import type { Deliver } from './delivery.js'
 import { splitGeometry } from './forecast.js'
 import { fetchEvents, fetchGeometryCollection } from './gdacs.js'
+import { sendAlerts } from './sendAlerts.js'
 import type { SubscriptionStore } from './store/index.js'
-import type { Channel, GdacsCollection } from './types.js'
+import type { GdacsCollection } from './types.js'
 
 export type Poller = ReturnType<typeof createPoller>
 
@@ -12,16 +13,6 @@ export type Poller = ReturnType<typeof createPoller>
 const FORGET_AFTER_MS = 30 * 86_400_000
 
 export function createPoller(store: SubscriptionStore, deliver: Deliver) {
-  /** Drops channels that will never work again; a subscription left with no way to reach anyone goes too. */
-  async function removeChannels(id: string, gone: Channel[]): Promise<'removed' | 'pruned' | 'missing'> {
-    const sub = await store.get(id)
-    if (!sub) return 'missing'
-    const channels = sub.channels.filter((c) => !gone.some((g) => sameChannel(c, g)))
-    if (!channels.length) return (await store.remove(id), 'removed')
-    await store.upsert({ ...sub, channels })
-    return 'pruned'
-  }
-
   let latest: { fetchedAt: string; data: GdacsCollection } | null = null
   let inflight: Promise<void> | null = null
 
@@ -37,23 +28,7 @@ export function createPoller(store: SubscriptionStore, deliver: Deliver) {
           .catch(() => null)
           .then((collection) => splitGeometry(collection, p.eventtype)),
       )
-      let sent = 0
-      const gone = new Map<string, Channel[]>()
-
-      for (const alert of alerts) {
-        const goneHere = gone.get(alert.sub.id) ?? []
-        // don't retry a channel that already turned out to be gone this poll
-        const sub = { ...alert.sub, channels: alert.sub.channels.filter((c) => !goneHere.includes(c)) }
-        const delivery = await deliver(sub, alert.payload)
-        if (anySent(delivery)) {
-          await store.recordNotified(sub.id, alert.areaIds, alert.eventKey, alert.level)
-          sent++
-        }
-        if (delivery.gone.length) gone.set(sub.id, [...goneHere, ...delivery.gone])
-      }
-
-      let expired = 0
-      for (const [id, channels] of gone) if ((await removeChannels(id, channels)) === 'removed') expired++
+      const { sent, expired } = await sendAlerts(alerts, store, deliver)
       const pruned = await store.pruneNotified(
         new Set(data.features.flatMap((e) => [eventKey(e), coneKey(e)])),
         new Date(Date.now() - FORGET_AFTER_MS),

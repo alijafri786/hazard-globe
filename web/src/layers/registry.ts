@@ -3,13 +3,16 @@ import { AURORA_COLOURS, AURORA_MAX, AURORA_MIN, type useAuroraLayer } from '../
 import type { useClimatologyLayer } from '../composables/useClimatologyLayer'
 import type { useCloudLayer } from '../composables/useCloudLayer'
 import { DEPTH_BANDS, type useEarthquakeLayer } from '../composables/useEarthquakeLayer'
+import { FRP_BANDS, type useFirmsLayer } from '../composables/useFirmsLayer'
 import { ALTITUDE_BANDS, type useFlightLayer } from '../composables/useFlightLayer'
 import type { useGibsLayers } from '../composables/useGibsLayers'
 import { FLOOD_LEVELS, FORECAST_LAYERS, type useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { ORBIT_CLASSES, SATELLITE_GROUPS, type SatelliteGroup, type useSatelliteLayer } from '../composables/useSatelliteLayer'
+import { satelliteIconOf } from '../services/satelliteIcon'
 import { SHIP_KINDS, type useShipLayer } from '../composables/useShipLayer'
 import type { useTimeline } from '../composables/useTimeline'
+import { DART_COLOUR, MESSAGE_STYLE, type useTsunamiLayer } from '../composables/useTsunamiLayer'
 import { WIND_SCALE, type useWindLayer } from '../composables/useWindLayer'
 import { HAZARD_TYPES, HAZARDS, hazardSymbol } from '../hazards'
 import { GIBS, GIBS_IDS } from './gibs'
@@ -47,6 +50,8 @@ export interface LayerDeps {
   climatology: ReturnType<typeof useClimatologyLayer>
   gibs: ReturnType<typeof useGibsLayers>
   aurora: ReturnType<typeof useAuroraLayer>
+  tsunami: ReturnType<typeof useTsunamiLayer>
+  firms: ReturnType<typeof useFirmsLayer>
   clouds: ReturnType<typeof useCloudLayer>
   wind: ReturnType<typeof useWindLayer>
   flights: ReturnType<typeof useFlightLayer>
@@ -90,6 +95,36 @@ export function createLayerRegistry(d: LayerDeps) {
       liveOnly: true,
     },
     {
+      id: 'firms',
+      label: 'Fires, live (FIRMS)',
+      group: 'Events',
+      on: toggle(
+        () => d.firms.enabled.value,
+        (on) => (d.firms.enabled.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
+      id: 'tsunami',
+      label: 'Tsunami messages',
+      group: 'Events',
+      on: toggle(
+        () => d.tsunami.enabled.value,
+        (on) => (d.tsunami.enabled.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
+      id: 'dart',
+      label: 'DART buoys',
+      group: 'Events',
+      on: toggle(
+        () => d.tsunami.buoysOn.value,
+        (on) => (d.tsunami.buoysOn.value = on),
+      ),
+      liveOnly: true,
+    },
+    {
       id: 'climatology',
       label: 'Storm climatology',
       group: 'Events',
@@ -125,7 +160,7 @@ export function createLayerRegistry(d: LayerDeps) {
       (id): LayerEntry => ({
         id: `gibs-${id}`,
         label: GIBS[id].label,
-        group: GIBS[id].tab === 'weather' ? 'Weather' : 'Sea & space',
+        group: ({ events: 'Events', weather: 'Weather', space: 'Sea & space' } as const)[GIBS[id].tab],
         on: toggle(
           () => d.gibs.on.value[id],
           (on) => (d.gibs.on.value[id] = on),
@@ -220,6 +255,24 @@ export function createLayerRegistry(d: LayerDeps) {
         ends: [fmt(scale.min), `${fmt(scale.max)}+`],
       })
     }
+    if (showing('firms') && d.firms.available.value) {
+      out.push(
+        d.firms.close.value
+          ? { title: 'Fires by power (FIRMS)', swatches: FRP_BANDS.map((b) => ({ colour: b.colour, label: b.label })) }
+          : { title: 'Fires per 25 km cell, last day', gradient: SEQUENTIAL, ends: ['1', `${d.firms.scaleMax.value ?? ''}+`] },
+      )
+    }
+    if (showing('tsunami') || showing('dart')) {
+      out.push({
+        title: 'Tsunamis (NOAA)',
+        swatches: [
+          ...(showing('tsunami')
+            ? [MESSAGE_STYLE.warning, MESSAGE_STYLE.advisory, MESSAGE_STYLE.information].map((s) => ({ colour: s.colour, label: s.label }))
+            : []),
+          ...(showing('dart') ? [{ colour: DART_COLOUR, label: 'DART buoy' }] : []),
+        ],
+      })
+    }
     if (showing('usgs-quakes')) {
       out.push({ title: 'Earthquakes by depth (USGS)', swatches: DEPTH_BANDS.map((b) => ({ colour: b.colour, label: b.label })) })
     }
@@ -227,7 +280,9 @@ export function createLayerRegistry(d: LayerDeps) {
       out.push({ title: 'Flood forecast (GloFAS)', swatches: FLOOD_LEVELS.map((l) => ({ ...l })) })
     }
     for (const id of GIBS_IDS) {
-      if (showing(`gibs-${id}`)) out.push({ title: GIBS[id].legend.title, gradient: GIBS[id].legend.colours, ends: GIBS[id].legend.ends })
+      if (!showing(`gibs-${id}`)) continue
+      const { title, colours, ends } = GIBS[id].legend
+      out.push(ends.length ? { title, gradient: colours, ends } : { title: 'NASA', swatches: [{ colour: colours[0], label: title }] })
     }
     if (showing('aurora')) {
       out.push({ title: 'Aurora, % chance overhead', gradient: AURORA_COLOURS, ends: [`${AURORA_MIN}`, `${AURORA_MAX}+`] })
@@ -242,7 +297,7 @@ export function createLayerRegistry(d: LayerDeps) {
       out.push({ title: 'Ships', swatches: SHIP_KINDS.map((k) => ({ colour: k.colour, label: k.label })) })
     }
     if (showing('satellites')) {
-      out.push({ title: 'Satellites by orbit', swatches: Object.values(ORBIT_CLASSES).map((c) => ({ ...c })) })
+      out.push({ title: 'Satellites by orbit', swatches: Object.values(ORBIT_CLASSES).map((c) => ({ ...c, image: satelliteIconOf(c.colour) })) })
     }
     return out
   })

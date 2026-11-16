@@ -4,7 +4,7 @@ import type { useGibsLayers } from '../composables/useGibsLayers'
 import { formatDay, parseGdacsDate } from '../composables/useTimeline'
 import { GIBS, GIBS_IDS, GIBS_URL, type GibsId } from '../layers/gibs'
 
-const props = defineProps<{ gibs: ReturnType<typeof useGibsLayers>; tab: 'weather' | 'space' }>()
+const props = defineProps<{ gibs: ReturnType<typeof useGibsLayers>; tab: 'events' | 'weather' | 'space' }>()
 const { on, shownDay, error, loading } = props.gibs
 
 const ids = GIBS_IDS.filter((id) => GIBS[id].tab === props.tab)
@@ -29,7 +29,7 @@ const gradient = (id: GibsId) => `linear-gradient(to right, ${GIBS[id].legend.co
 
 <template>
   <fieldset class="gibs">
-    <legend>{{ tab === 'weather' ? 'From satellites' : 'The sea' }}</legend>
+    <legend>{{ { events: 'Fires', weather: 'From satellites', space: 'The sea' }[tab] }}</legend>
     <label v-for="id in others" :key="id" class="toggle">
       <input v-model="on[id]" type="checkbox" />
       {{ GIBS[id].label }}
@@ -46,13 +46,16 @@ const gradient = (id: GibsId) => `linear-gradient(to right, ${GIBS[id].legend.co
     </template>
 
     <div v-for="id in active" :key="id" class="active">
-      <div class="scale" :aria-label="`${GIBS[id].label} colours`">
+      <div v-if="GIBS[id].legend.ends.length" class="scale" :aria-label="`${GIBS[id].label} colours`">
         <i :style="{ background: gradient(id) }" />
         <div class="ends">
           <span v-for="e in GIBS[id].legend.ends" :key="e">{{ e }}</span>
         </div>
         <small class="unit">{{ GIBS[id].legend.title }}</small>
       </div>
+      <p v-else class="swatch">
+        <i :style="{ background: GIBS[id].legend.colours[0] }" aria-hidden="true" />{{ GIBS[id].legend.title }}
+      </p>
       <p v-if="error[id]" class="error">{{ error[id] }}</p>
       <p v-else class="meta" role="status">
         <span v-if="loading[id] && !shownDay[id]">Loading…</span>
@@ -111,6 +114,21 @@ legend {
 .unit {
   font-size: 11px;
   color: var(--muted);
+}
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.swatch i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
 .meta,

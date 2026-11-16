@@ -54,6 +54,19 @@ describe('createCachedSource', () => {
     await vi.waitFor(async () => expect(await source.get('k')).toBe(3))
   })
 
+  it('getFresh waits for a refresh that is due, where get answers with the old copy', async () => {
+    let t = 0
+    let n = 0
+    const fetch = vi.fn(async () => ++n)
+    const source = createCachedSource({ ttlMs: 10 * MINUTE, failureRetryMs: MINUTE, fetch, now: () => t })
+    expect(await source.getFresh('x')).toBe(1)
+    t += 10 * MINUTE
+    expect(await source.get('x')).toBe(1) // the old copy, refreshing behind it
+    expect(await source.getFresh('x')).toBe(2) // waits for that refresh
+    expect(await source.getFresh('x')).toBe(2) // and isn't due again
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('answers null when upstream has never answered, and peek never fetches', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const fetch = vi.fn().mockRejectedValue(new Error('down'))

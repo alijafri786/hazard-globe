@@ -35,6 +35,10 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   },
+  /** NASA FIRMS map key (free): live fires, and fire alerts; off without one */
+  firmsMapKey: process.env.FIRMS_MAP_KEY ?? '',
+  /** ReliefWeb's approved app name (apidoc.reliefweb.int/parameters#appname); reports on event cards are off without one */
+  reliefwebAppname: process.env.RELIEFWEB_APPNAME ?? '',
   /** Ships from AISStream.io (free key); off without one */
   aisstreamKey: process.env.AISSTREAM_API_KEY ?? '',
   opensky: {

@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { useWatchAreas } from '../composables/useWatchAreas'
-import { HAZARD_TYPES, HAZARDS } from '../hazards'
+import { ALERT_HAZARDS, alertHazardLabel } from '../hazards'
 import AreaStormHistory from './AreaStormHistory.vue'
 
 const props = defineProps<{ watch: ReturnType<typeof useWatchAreas>; busy: boolean }>()
 const emit = defineEmits<{ save: []; locate: [] }>()
 const { draft, editingIndex, startPicking, cancelEdit, flyTo } = props.watch
+
+// Fire alerts need the server's FIRMS key: offered only when it has one, or while editing an area saved with
+// them, so they can be taken off (and put back, if that was a slip)
+const savedWithFires = computed(() => {
+  const i = editingIndex.value
+  return i !== null && Boolean(props.watch.areas.value[i]?.hazards.includes('HS'))
+})
+const hazards = computed(() =>
+  ALERT_HAZARDS.filter((h) => h !== 'HS' || props.watch.serverChannels.value?.fires || savedWithFires.value),
+)
 
 const hasCentre = computed(() => draft.value?.lon !== undefined && draft.value?.lat !== undefined)
 </script>
@@ -37,10 +47,14 @@ const hasCentre = computed(() => draft.value?.lon !== undefined && draft.value?.
 
     <fieldset class="row">
       <legend>Hazards</legend>
-      <label v-for="h in HAZARD_TYPES" :key="h" class="check">
-        <input v-model="draft.hazards" type="checkbox" :value="h" /> {{ HAZARDS[h].label }}
+      <label v-for="h in hazards" :key="h" class="check">
+        <input v-model="draft.hazards" type="checkbox" :value="h" /> {{ alertHazardLabel(h) }}
       </label>
     </fieldset>
+    <p v-if="draft.hazards.includes('TS')" class="hint">
+      Tsunami messages come from NOAA's Pacific and US centres, for earthquakes within 1,000 km of this area. They
+      cover the Pacific, the Caribbean and North American coasts: elsewhere, follow your own country's centre.
+    </p>
     <p v-if="draft.hazards.includes('EQ')" class="hint">
       Earthquake alerts come after the shaking, when it was strong near this area: a prompt to check on people.
     </p>

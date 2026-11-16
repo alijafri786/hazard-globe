@@ -12,6 +12,8 @@ Select a cyclone to see its track (solid where it has been, dashed where it's fo
 
 Switch the Events tab to **History** to look back over the last 7, 30 or 90 days: drag the slider or press play to see which events were active on each day.
 
+**Tsunami messages** from NOAA's warning centres show on the globe and in a list, and a warning or threat in force shows across the top of the screen whatever else is on. Watch areas can choose to be alerted about them too. **DART buoys** on the ocean floor show the last day of water height, and when one has triggered.
+
 Switch on **USGS earthquakes** to see every recent earthquake, live: magnitude 2.5 and over in the past day, or 4.5 and over in the past week, sized by magnitude and coloured by depth. Click one for its depth, USGS's impact estimate (PAGER) and, when GDACS reports the same earthquake, its GDACS alert.
 
 Switch on the **storm climatology** to see how often tropical cyclones have passed near each place since 1980, as storms per decade: all tropical storms, or only those at hurricane or major strength, over the whole year or one month. Each watch area that watches storms says the same for itself, for example *Since 1980: 19 storms within 150 km, 5 at hurricane strength, most in Sep, Aug and Oct. Strongest: Andrew (1992), 145 kt.*
@@ -128,6 +130,26 @@ DATABASE_URL=postgres://user:password@host:5432/dbname
 npm run store:import --workspace server   # reads DATA_FILE; or add: -- path/to/store.json
 ```
 
+### Optional: live fires and fire alerts
+
+The globe always has NASA's daily map of fires seen from space. With a free [NASA FIRMS map key](https://firms.modaps.eosdis.nasa.gov/api/map_key/) it also shows every single fire from the last day, with its time and power, and watch areas can choose to be alerted about fires nearby:
+
+```
+FIRMS_MAP_KEY=your-map-key
+```
+
+The server asks FIRMS for the last day of VIIRS detections (NOAA-20 and NOAA-21) at most every 30 minutes, and only while someone has the layer on or an area wants fire alerts, which keeps well inside FIRMS's limits. An area is alerted, at most once a day for each place, when an ~11 km patch has 3 or more confident detections in 12 hours, or one high-confidence detection of 100 MW or more. Patches that are hot on most days (gas flares, volcanoes, some factories) are left out once the server has seen a few weeks of them: that memory starts afresh when the server restarts.
+
+### Optional: humanitarian reports
+
+Event cards can list [ReliefWeb](https://reliefweb.int)'s newest situation reports, maps and appeals for the disaster. ReliefWeb's API needs an app name it has approved: [request one](https://apidoc.reliefweb.int/parameters#appname), then add it to `server/.env`:
+
+```
+RELIEFWEB_APPNAME=your-approved-app-name
+```
+
+The server looks a disaster up by its GLIDE number, or by type, country and a start within a week when exactly one matches, and only when someone opens its card. It keeps each answer for an hour. Only titles, sources, dates and links are shown; the reports belong to their publishers.
+
 ### Optional: ships
 
 Create a free API key at [aisstream.io](https://aisstream.io) and add it to `server/.env`:
@@ -182,6 +204,8 @@ Whether other sites may embed your deployment is up to the web server that serve
 - **Air quality:** from Open-Meteo's [air quality API](https://open-meteo.com/en/docs/air-quality-api) (Copernicus CAMS model data, CC BY 4.0), asked alongside the weather for the same spot, straight from the browser, and remembered for 10 minutes. The US index is shown in the Americas and the European one elsewhere, with a button to switch; each band's name always goes with its colour. The NASA haze layer (MODIS aerosol optical depth) is about the whole column of air, not what you breathe.
 - **Weather:** current conditions come from [Open-Meteo](https://open-meteo.com), straight from the browser, with no key. They're weather-model values for a patch a few kilometres across, not a reading from the nearest station. Each spot is asked about at most once every 10 minutes per browser, and nothing is asked until someone checks a spot. Open-Meteo's free API is for non-commercial use (under 10,000 calls a day); a commercial deployment needs one of their paid plans.
 - **Ships:** AIS positions from AISStream.io, whose data comes from volunteers' receivers on land: busy coasts and shipping lanes are well covered, the open ocean hardly at all. The server opens one WebSocket when someone first switches ships on, subscribes to the whole world, and closes it after 30 minutes with nobody looking, dropping what it collected. Positions build up over the first few minutes as ships report, and the app says so. Snapshots are rebuilt every 2 minutes; ships not heard from for 30 minutes are dropped; between snapshots, browsers move each ship along its course. A ship's destination, size and status are fetched when it's selected. Destinations are typed in by crews and often out of date. Node's WebSocket asks for compression, which AISStream needs to avoid its bandwidth limits.
+- **Tsunami messages:** from the [Pacific and National Tsunami Warning Centers](https://www.tsunami.gov/) (NOAA, public domain), whose Atom feeds hold only each centre's latest message: the server reads them every 2 minutes and keeps a day of messages. A watch area that chooses tsunami messages is alerted when one is about an earthquake within 1,000 km: Red for a warning or threat, Orange for an advisory or watch, Green for an information statement. An upgraded message about the same earthquake alerts again; a cancellation never alerts, and nothing ever says "all clear". These centres cover the Pacific, the Caribbean and North American coasts; Japan (JMA), the Indian Ocean (INCOIS) and the north-east Atlantic and Mediterranean have their own. The banner shows a warning or threat for 12 hours unless a newer message about the same earthquake replaces it. Not an official warning service.
+- **DART buoys:** NOAA's [National Data Buoy Center](https://www.ndbc.noaa.gov/dart.shtml) (public domain): the station list once a day, and a buoy's readings only when its card is opened (kept 15 minutes). A buoy reporting every minute or faster in the last 6 hours is in event mode.
 - **Aurora and space weather:** NOAA's [Space Weather Prediction Center](https://www.swpc.noaa.gov/) (public domain, no key) through the server, which asks for the OVATION aurora forecast at most every 5 minutes and the Kp index and storm scales every 15, only while someone has the layer on. OVATION gives the chance of aurora overhead for the next 30 to 90 minutes on a 1° grid; it can only be seen at night with a clear sky. NOAA's "estimated" Kp for a period still to come counts as forecast. Hidden in History mode.
 - **NASA overlays:** rainfall (IMERG), sea temperature and its anomaly, and sea ice (GHRSST MUR) are map tiles from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) (no key, NASA's open data policy), fetched straight from the browser and only while a layer is on. Live shows the newest day GIBS has, found by asking for one tile and reading the day it answers with. In History they show the day being looked at, once the slider stops on it, or one of the two days before when GIBS lacks that day. Tiles are no more detailed than the data (about 10 km for rainfall, 1 km for the sea). The key's colours are sampled from GIBS's own colour maps.
 - **Storm climatology:** built from NOAA's [IBTrACS](https://www.ncei.noaa.gov/products/international-best-track-archive) since-1980 file (public domain) by `npm run climatology --workspace server`, which writes `server/assets/climatology/` (about 1.4 MB, committed). A [yearly workflow](.github/workflows/climatology.yml) rebuilds it each January and opens a pull request if anything changed. A storm counts for a place when its centre passed within 100 km while at least that strong, using the US agencies' 1-minute wind (or WMO's), and counts once however long it lingered. Only the storm's tropical and subtropical stages count, not what it was before or became after. The map shows where storms have gone, not a forecast. Cite as Knapp, K. R., et al. (2010), *The International Best Track Archive for Climate Stewardship (IBTrACS)*, BAMS 91, 363–376.

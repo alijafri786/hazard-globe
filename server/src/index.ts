@@ -11,6 +11,11 @@ import { createHistory } from './history.js'
 import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { createSatellites } from './satellites.js'
+import { createDart } from './dart.js'
+import { createFires } from './fires.js'
+import { createReliefWeb } from './reliefweb.js'
+import { createSourcePoller } from './sourceAlerts.js'
+import { createTsunamiWatch } from './tsunami.js'
 import { createShips } from './ships.js'
 import { createSpaceWeather } from './spaceWeather.js'
 import { openStore, storeKind } from './store/index.js'
@@ -53,6 +58,21 @@ if (config.telegram.botToken && !e2e) {
 
 const deliver = createDeliver(notifiers)
 const poller = createPoller(store, deliver)
+const tsunami = createTsunamiWatch()
+// Tsunami messages can't wait for GDACS's 15 minutes: their own poll, every 2
+const tsunamiAlerts = createSourcePoller({ name: 'tsunami', intervalMs: 2 * 60_000, items: tsunami.items, store, deliver })
+// Never in end-to-end runs: they mustn't reach FIRMS
+const fires = config.firmsMapKey && !e2e ? createFires({ mapKey: config.firmsMapKey }) : undefined
+const fireAlerts = fires
+  ? createSourcePoller({
+      name: 'fires',
+      intervalMs: 30 * 60_000,
+      // FIRMS is asked only when some area wants fire alerts
+      items: async () => fires.items((await store.list()).some((s) => s.areas.some((a) => a.hazards.includes('HS')))),
+      store,
+      deliver,
+    })
+  : undefined
 const app = createApp({
   store,
   poller,
@@ -63,6 +83,12 @@ const app = createApp({
   earthquakes: createEarthquakes(),
   climatology: await loadClimatology(),
   spaceWeather: createSpaceWeather(),
+  fires,
+  // Never in end-to-end runs: they mustn't reach tsunami.gov or NDBC
+  tsunami: e2e ? undefined : tsunami,
+  dart: e2e ? undefined : createDart(),
+  // Never in end-to-end runs: they mustn't reach ReliefWeb
+  reliefweb: config.reliefwebAppname && !e2e ? createReliefWeb({ appname: config.reliefwebAppname }) : undefined,
   // Never in end-to-end runs: they mustn't open a real stream
   ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
   deliver,
@@ -80,5 +106,9 @@ serve({ fetch: app.fetch, port: config.port }, (info) => {
   ]
   const mode = e2e ? 'E2E mode, no polling' : `${channels.join(', ')}, ${storeKind} store`
   console.log(`hazard-globe server on http://localhost:${info.port} (${mode})`)
-  if (!e2e) poller.start()
+  if (!e2e) {
+    poller.start()
+    tsunamiAlerts.start()
+    fireAlerts?.start()
+  }
 })
