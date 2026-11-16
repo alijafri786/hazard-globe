@@ -118,7 +118,8 @@ test('a live overlay moves on to NASA’s newer day by itself', async ({ page })
   newest = isoDay(today - DAY) // NASA adds a day
   await page.clock.fastForward(61 * 60_000)
   await expect(status).toHaveText(`Sea temperature: ${formatDay(today - DAY)}`)
-  expect(days('GHRSST_L4_MUR_Sea_Surface_Temperature')).toContain(isoDay(today - DAY))
+  // the status changes as the new day's layer is added; its tiles are asked for on the frames after
+  await expect.poll(() => days('GHRSST_L4_MUR_Sea_Surface_Temperature')).toContain(isoDay(today - DAY))
 })
 
 test('while History plays, no day is fetched until it stops', async ({ page }) => {
