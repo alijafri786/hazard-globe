@@ -10,6 +10,11 @@
 interface Env {
   /** Origin of the Hazard Globe server, e.g. https://api.example.org (no path, no trailing slash). */
   API_ORIGIN?: string
+  /**
+   * Shared secret sent to the server in X-Origin-Auth (a Worker secret, not a plain variable). The VM's Caddy
+   * refuses requests without it, so nobody can reach the server except through this Worker.
+   */
+  ORIGIN_SECRET?: string
   ASSETS: { fetch(request: Request): Promise<Response> }
 }
 
@@ -30,6 +35,8 @@ export default {
     if (clientIp) headers.set('x-forwarded-for', clientIp)
     else headers.delete('x-forwarded-for')
     headers.set('x-forwarded-host', url.host)
+    headers.delete('x-origin-auth')
+    if (env.ORIGIN_SECRET) headers.set('x-origin-auth', env.ORIGIN_SECRET)
     headers.set('x-forwarded-proto', url.protocol.replace(':', ''))
 
     return fetch(

@@ -179,8 +179,20 @@ In the Cloudflare dashboard, import the repository as a Worker and set:
 - **Deploy command:** `npx wrangler deploy`
 - **Build variables:** `NODE_VERSION=22`, and `VITE_CESIUM_ION_TOKEN` if you use one (see above). Vite builds these into the app, so they must be build variables.
 - **Runtime variable** (Settings > Variables and Secrets): `API_ORIGIN`, your server's origin, e.g. `https://api.example.org`. Until it's set, `/api/*` answers 503. Deploys keep it (`keep_vars`).
+- **Secret** (optional, same place, type Secret): `ORIGIN_SECRET`. The Worker sends it to the server in an `X-Origin-Auth` header, so your server can refuse anything that didn't come through the Worker.
 
-On the server, set `TRUST_PROXY=1` (add one for each proxy in front of the server itself, such as nginx) so rate limits see visitors' addresses, and set `WEB_ORIGIN` and `PUBLIC_URL` to the app's address. Email confirmation and unsubscribe links use the server's `/api/email/...` routes, which the Worker forwards, so they work on the app's address too. The Worker replaces any `X-Forwarded-For` a browser sends with the address Cloudflare saw. Anyone who calls your server directly can still send their own, though, so keep the server reachable only through the Worker if rate limits matter to you.
+On the server, set `TRUST_PROXY=1` (add one for each proxy in front of the server itself, such as nginx) so rate limits see visitors' addresses, and set `WEB_ORIGIN` and `PUBLIC_URL` to the app's address. Email confirmation and unsubscribe links use the server's `/api/email/...` routes, which the Worker forwards, so they work on the app's address too. The Worker replaces any `X-Forwarded-For` a browser sends with the address Cloudflare saw. Anyone who calls your server directly could still send their own, so keep the server reachable only through the Worker: have the reverse proxy in front of it refuse requests without the `ORIGIN_SECRET` header, and set `HOST=127.0.0.1` so the server's port isn't reachable from outside.
+
+### Running the server on a small VM
+
+`deploy/vm-setup.sh` sets the server up on a Debian or Ubuntu VM (a Google Cloud e2-micro is enough) in one command: Node 22, the server as a systemd service on `127.0.0.1:8787`, and Caddy in front with automatic HTTPS, compression and the `ORIGIN_SECRET` check. With no domain, it uses `<ip>.sslip.io`. The VM needs ports 80 and 443 open.
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/alijafri786/hazard-globe/main/deploy/vm-setup.sh \
+  | sudo APP_ORIGIN=https://hazard-globe.example.workers.dev bash
+```
+
+It ends by printing the `API_ORIGIN` and `ORIGIN_SECRET` to set on the Worker. Run it again to update the server; it keeps `server/.env` (which holds the push keys, so back it up) and the secret.
 
 To try the Worker locally, start the server (`npm run dev --workspace server`, on port 8787), build the web app, put `API_ORIGIN=http://localhost:8787` in `.dev.vars`, and run `npx wrangler dev --port 8788`. Wrangler also defaults to port 8787, so without `--port` it would take the server's port and send `/api/*` back to itself.
 

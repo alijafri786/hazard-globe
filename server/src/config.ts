@@ -12,6 +12,8 @@ function num(name: string, fallback: number): number {
 
 export const config = {
   port: num('PORT', 8787),
+  /** Interface to listen on; all of them when unset. 127.0.0.1 keeps the server behind a local reverse proxy. */
+  host: process.env.HOST || undefined,
   pollIntervalMinutes: Math.max(10, num('POLL_INTERVAL_MINUTES', 15)),
   lookbackDays: num('LOOKBACK_DAYS', 10),
   dataFile: process.env.DATA_FILE ?? './data/store.json',
