@@ -10,6 +10,7 @@ import type { EmailNotifier } from './email.js'
 import { getFlights } from './flights.js'
 import type { Climatology } from './climatology/index.js'
 import { isStormClass, SLICES, STORM_CLASSES } from './climatology/model.js'
+import type { SpaceWeather } from './spaceWeather.js'
 import { isQuakeFeed, QUAKE_FEEDS, type QuakeFeed, type QuakesSnapshot } from './earthquakes.js'
 import { fetchGeometryCollection } from './gdacs.js'
 import { isHazardType } from './hazards.js'
@@ -47,6 +48,8 @@ export interface AppDeps {
   wind: () => Promise<WindGrid | null>
   /** How often storms pass each place, from IBTrACS (see climatology/); null when it hasn't been built */
   climatology?: Climatology | null
+  /** Aurora forecast and the Kp index from NOAA SWPC (see spaceWeather.ts) */
+  spaceWeather?: Pick<SpaceWeather, 'aurora' | 'summary'>
   /** USGS earthquakes by feed (see earthquakes.ts) */
   earthquakes?: (feed: QuakeFeed) => Promise<QuakesSnapshot | null>
   /** Present when ships are set up (an AISStream key) */
@@ -270,6 +273,23 @@ export function createApp(deps: AppDeps, options: Partial<AppOptions> = {}) {
     }
     c.header('Cache-Control', 'public, max-age=3600')
     return c.json(deps.climatology.near(lon, lat, radiusKm))
+  })
+
+  const noSpaceWeather = { error: 'Space weather unavailable, try again shortly' }
+
+  // 64,800 bytes of grid, sent as base64 in JSON so it travels through any proxy and compresses well
+  app.get('/api/space/aurora', compress(), async (c) => {
+    const grid = await deps.spaceWeather?.aurora().catch(() => null)
+    if (!grid) return c.json(noSpaceWeather, 503)
+    c.header('Cache-Control', 'public, max-age=120')
+    return c.json(grid)
+  })
+
+  app.get('/api/space/summary', async (c) => {
+    const summary = await deps.spaceWeather?.summary().catch(() => null)
+    if (!summary) return c.json(noSpaceWeather, 503)
+    c.header('Cache-Control', 'public, max-age=300')
+    return c.json(summary)
   })
 
   // ~100 quakes a week at M4.5+, a few hundred a day at M2.5+: tens of KB before compression

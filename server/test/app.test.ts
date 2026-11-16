@@ -565,3 +565,32 @@ describe('storm climatology routes', () => {
     }
   })
 })
+
+describe('space weather routes', () => {
+  const aurora = vi.fn(async () => ({
+    observedAt: '2026-11-15T18:52:00Z',
+    forecastAt: '2026-11-15T20:07:00Z',
+    cols: 360 as const,
+    rows: 180 as const,
+    data: Buffer.alloc(64_800).toString('base64'),
+  }))
+  const summary = vi.fn(async () => ({
+    fetchedAt: '2026-11-15T19:00:00.000Z',
+    now: { time: '2026-11-15T18:00:00.000Z', kp: 2, observed: true },
+    kp: [],
+    scales: { G: 0, S: 0, R: 0 },
+  }))
+
+  it('serves the aurora grid compressed, and the summary', async () => {
+    const { app } = setup({}, { spaceWeather: { aurora, summary } })
+    const res = await app.request('/api/space/aurora', { headers: { 'Accept-Encoding': 'gzip' } })
+    expect(res.headers.get('Content-Encoding')).toBe('gzip')
+    expect((await (await app.request('/api/space/summary')).json()).now.kp).toBe(2)
+  })
+
+  it('answers 503 when SWPC has never answered, or space weather is not set up', async () => {
+    aurora.mockResolvedValueOnce(null as never)
+    expect((await setup({}, { spaceWeather: { aurora, summary } }).app.request('/api/space/aurora')).status).toBe(503)
+    expect((await setup().app.request('/api/space/summary')).status).toBe(503)
+  })
+})

@@ -1,5 +1,7 @@
 import type {
+  AuroraGrid,
   ChannelView,
+  SpaceWeatherSummary,
   ClimatologyInfo,
   PlaceClimatology,
   StormClass,
@@ -75,6 +77,10 @@ export const api = {
 
   climatologyNear: (lon: number, lat: number, radiusKm: number) =>
     request<PlaceClimatology>(`/api/climatology/near?lon=${lon}&lat=${lat}&radiusKm=${radiusKm}`),
+
+  aurora: () => request<AuroraGrid>('/api/space/aurora'),
+
+  spaceWeather: () => request<SpaceWeatherSummary>('/api/space/summary'),
 
   earthquakes: (feed: QuakeFeed) => request<QuakesResponse>(`/api/earthquakes?feed=${feed}`),
 

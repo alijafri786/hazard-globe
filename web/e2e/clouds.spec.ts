@@ -82,7 +82,7 @@ test('clouds: fetched once as whole-world frames, played, scrubbed, credited, hi
   await page.getByRole('button', { name: 'History' }).click()
   await expect(credits(page)).not.toContainText('NOAA/NESDIS GMGSI')
   await page.getByRole('tab', { name: 'Weather' }).click()
-  await expect(page.getByText("Weather shows the last few hours, so it's hidden while you look at history.")).toBeVisible()
+  await expect(page.getByText("Clouds, wind and temperature show the last few hours, so they're hidden while you look at history.")).toBeVisible()
   await page.getByRole('button', { name: 'Back to live' }).click()
   await expect(credits(page)).toContainText('NOAA/NESDIS GMGSI')
 

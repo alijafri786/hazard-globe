@@ -12,6 +12,7 @@ import { createPoller } from './poller.js'
 import { pushNotifier } from './push.js'
 import { createSatellites } from './satellites.js'
 import { createShips } from './ships.js'
+import { createSpaceWeather } from './spaceWeather.js'
 import { openStore, storeKind } from './store/index.js'
 import { createTracks } from './tracks.js'
 import { createWind } from './weather/wind.js'
@@ -61,6 +62,7 @@ const app = createApp({
   wind: createWind(),
   earthquakes: createEarthquakes(),
   climatology: await loadClimatology(),
+  spaceWeather: createSpaceWeather(),
   // Never in end-to-end runs: they mustn't open a real stream
   ships: config.aisstreamKey && !e2e ? createShips({ apiKey: config.aisstreamKey }) : undefined,
   deliver,

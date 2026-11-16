@@ -74,6 +74,72 @@ const WEATHER_CODES: Record<number, string> = {
   99: 'Thunderstorm with heavy hail',
 }
 
+const AIR_QUALITY = 'https://air-quality-api.open-meteo.com/v1/air-quality'
+
+/** Air quality at a place now, from Open-Meteo's CAMS-based model (CC BY 4.0, free for non-commercial use) */
+export interface AirQuality {
+  europeanAqi: number | null
+  usAqi: number | null
+  /** µg/m³ */
+  pm2_5: number | null
+  pm10: number | null
+  dust: number | null
+}
+
+export type AqiScale = 'eu' | 'us'
+
+/** The bands of each index, with the colours their agencies use; a band's name always goes with its colour */
+export const AQI_BANDS: Record<AqiScale, { upTo: number; label: string; colour: string }[]> = {
+  eu: [
+    { upTo: 20, label: 'Good', colour: '#50f0e6' },
+    { upTo: 40, label: 'Fair', colour: '#50ccaa' },
+    { upTo: 60, label: 'Moderate', colour: '#f0e641' },
+    { upTo: 80, label: 'Poor', colour: '#ff5050' },
+    { upTo: 100, label: 'Very poor', colour: '#960032' },
+    { upTo: Infinity, label: 'Extremely poor', colour: '#7d2181' },
+  ],
+  us: [
+    { upTo: 50, label: 'Good', colour: '#00e400' },
+    { upTo: 100, label: 'Moderate', colour: '#ffff00' },
+    { upTo: 150, label: 'Unhealthy for sensitive groups', colour: '#ff7e00' },
+    { upTo: 200, label: 'Unhealthy', colour: '#ff0000' },
+    { upTo: 300, label: 'Very unhealthy', colour: '#8f3f97' },
+    { upTo: Infinity, label: 'Hazardous', colour: '#7e0023' },
+  ],
+}
+
+export const aqiBand = (scale: AqiScale, value: number) => AQI_BANDS[scale].find((b) => value <= b.upTo)!
+
+/** The index people there are used to: the US one in the Americas, the European one elsewhere */
+export const defaultAqiScale = (lon: number): AqiScale => (lon < -30 && lon > -170 ? 'us' : 'eu')
+
+const airCache = new Map<string, { at: number; air: AirQuality }>()
+
+export async function airQuality(lon: number, lat: number): Promise<AirQuality> {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`
+  const hit = airCache.get(key)
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.air
+  const params = new URLSearchParams({
+    latitude: lat.toFixed(2),
+    longitude: lon.toFixed(2),
+    current: 'european_aqi,us_aqi,pm2_5,pm10,dust',
+  })
+  const res = await fetch(`${AIR_QUALITY}?${params}`, { signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) throw new Error(`Open-Meteo answered ${res.status}`)
+  const c = ((await res.json()) as { current?: Record<string, unknown> }).current ?? {}
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  const air: AirQuality = {
+    europeanAqi: n(c.european_aqi),
+    usAqi: n(c.us_aqi),
+    pm2_5: n(c.pm2_5),
+    pm10: n(c.pm10),
+    dust: n(c.dust),
+  }
+  if (airCache.size >= CACHE_SIZE) airCache.delete(airCache.keys().next().value!)
+  airCache.set(key, { at: Date.now(), air })
+  return air
+}
+
 const cache = new Map<string, { at: number; conditions: Conditions }>()
 
 export async function currentConditions(lon: number, lat: number): Promise<Conditions> {
