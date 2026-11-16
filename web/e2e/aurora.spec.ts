@@ -65,7 +65,9 @@ test('a watch area under the aurora is told its chance', async ({ page }) => {
 
   await page.getByRole('tab', { name: 'Sea & space' }).click()
   await page.getByLabel('Show the aurora forecast').check()
-  await expect(page.locator('.space .areas')).toContainText('Tromsø: 35% chance overhead')
+  // Turning the aurora on lights the globe for day and night, and CI's software rendering can stall for
+  // seconds rebuilding the shaders of the many tiles round Tromsø, where the camera has just flown
+  await expect(page.locator('.space .areas')).toContainText('Tromsø: 35% chance overhead', { timeout: 20_000 })
 })
 
 test('hidden while looking back, as it is a forecast for the next hour', async ({ page }) => {
