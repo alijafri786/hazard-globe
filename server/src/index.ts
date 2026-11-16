@@ -97,7 +97,7 @@ const app = createApp({
   pushEnabled: e2e || pushEnabled,
 })
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   const channels = [
     `push ${pushEnabled ? 'on' : 'OFF — set VAPID keys'}`,
     `email ${email ? 'on' : 'off'}`,
@@ -105,7 +105,7 @@ serve({ fetch: app.fetch, port: config.port }, (info) => {
     `ships ${config.aisstreamKey ? 'on' : 'off'}`,
   ]
   const mode = e2e ? 'E2E mode, no polling' : `${channels.join(', ')}, ${storeKind} store`
-  console.log(`hazard-globe server on http://localhost:${info.port} (${mode})`)
+  console.log(`hazard-globe server on http://${config.host ?? 'localhost'}:${info.port} (${mode})`)
   if (!e2e) {
     poller.start()
     tsunamiAlerts.start()
