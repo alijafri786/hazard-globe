@@ -182,7 +182,9 @@ In the Cloudflare dashboard, import the repository as a Worker and set:
 
 On the server, set `TRUST_PROXY=1` (add one for each proxy in front of the server itself, such as nginx) so rate limits see visitors' addresses, and set `WEB_ORIGIN` and `PUBLIC_URL` to the app's address. Email confirmation and unsubscribe links use the server's `/api/email/...` routes, which the Worker forwards, so they work on the app's address too. The Worker replaces any `X-Forwarded-For` a browser sends with the address Cloudflare saw. Anyone who calls your server directly can still send their own, though, so keep the server reachable only through the Worker if rate limits matter to you.
 
-To try the Worker locally, build the web app, put `API_ORIGIN=http://localhost:8787` in `.dev.vars`, and run `npx wrangler dev`.
+To try the Worker locally, start the server (`npm run dev --workspace server`, on port 8787), build the web app, put `API_ORIGIN=http://localhost:8787` in `.dev.vars`, and run `npx wrangler dev --port 8788`. Wrangler also defaults to port 8787, so without `--port` it would take the server's port and send `/api/*` back to itself.
+
+Cloudflare also builds a Preview for each branch and pull request. Previews don't inherit production variables, so their `/api/*` answers 503 until you give them an `API_ORIGIN` in the `previews` block of `wrangler.jsonc`.
 
 ## Controls
 

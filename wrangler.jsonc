@@ -13,5 +13,9 @@
   // API_ORIGIN (your server's origin, e.g. https://api.example.org) is set in the dashboard under
   // Settings > Variables and Secrets, not here, so each deployment can point at its own server.
   // keep_vars stops deploys from wiping it. Until it's set, /api/* answers 503.
-  "keep_vars": true
+  "keep_vars": true,
+  // Required by `wrangler preview`, which Cloudflare runs to build a Preview for each branch and pull
+  // request. Previews don't inherit production variables, so their /api/* answers 503 unless you give
+  // them an API_ORIGIN, e.g. "previews": { "vars": { "API_ORIGIN": "https://staging-api.example.org" } }.
+  "previews": {}
 }
