@@ -169,6 +169,18 @@ OPENSKY_CLIENT_ID=your-client-id
 OPENSKY_CLIENT_SECRET=your-client-secret
 ```
 
+## Deploying the web app to Cloudflare
+
+`wrangler.jsonc` deploys the built web app (`web/dist`) as static assets on Cloudflare Workers. It covers the web app only: the server is a long-running Node process (poller, subscription store, alert delivery), so host it separately and point the web app at it.
+
+In the Cloudflare dashboard, import the repository as a Worker and set:
+
+- **Build command:** `npm run build --workspace web`
+- **Deploy command:** `npx wrangler deploy`
+- **Build variables:** `VITE_API_BASE` (your server's URL, no trailing slash), `VITE_CESIUM_ION_TOKEN` (optional, see above) and `NODE_VERSION=22`. Vite builds these into the app, so they must be build variables, not runtime ones.
+
+On the server, set `WEB_ORIGIN` and `PUBLIC_URL` to the app's address so CORS and the links in alert emails work.
+
 ## Controls
 
 Drag to spin the globe, scroll or pinch to zoom, and right-drag (or two-finger drag) to tilt. The buttons at the bottom right do the same with a click or press-and-hold, and the compass turns the view back to north. Keyboard: arrow keys pan, `+`/`-` zoom, `Q`/`E` rotate, `W`/`S` tilt.
