@@ -1,19 +1,26 @@
 import {
   ArcType,
+  BillboardCollection,
   CallbackPositionProperty,
   CallbackProperty,
+  Cartesian2,
   Cartesian3,
   Cartographic,
   Color,
   Credit,
+  DistanceDisplayCondition,
   Entity,
+  LabelCollection,
+  LabelStyle,
   NearFarScalar,
-  PointPrimitiveCollection,
+  PolylineGlowMaterialProperty,
+  VerticalOrigin,
   type Viewer,
 } from 'cesium'
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type ShallowRef } from 'vue'
 import { api } from '../services/api'
 import { escapeHtml } from '../services/html'
+import { SATELLITE_ICON, satelliteIconSize } from '../services/satelliteIcon'
 import type { OrbitalElements } from '../types'
 import type { FromWorker, Selected, ToWorker } from '../workers/satellites'
 import type { useGlobeClicks } from './useGlobeClicks'
@@ -50,8 +57,32 @@ const TICK_MS = 1_000
 const GROUP_REFRESH_MS = 2 * 60 * 60_000
 const REFRESH_CHECK_MS = 10 * 60_000
 const DESCRIBE_EVERY_TICKS = 5 // the info box is rewritten, so not every second
-const SCALE_BY_DISTANCE = new NearFarScalar(1e6, 1.6, 4e7, 0.7)
+const SCALE_BY_DISTANCE = new NearFarScalar(1e6, 1.5, 4e7, 0.6)
+const SELECTED_SCALE = 1.8
+/** Station names show from this close: the whole Earth in view, not the solar system */
+const LABEL_DISTANCE = new DistanceDisplayCondition(0, 2.5e7)
+/** Closer than 50 km counts as the same place, for names */
+const SAME_PLACE_M2 = 50_000 ** 2
 const scratch = new Cartesian3()
+const east = new Cartesian3()
+const north = new Cartesian3()
+const up = new Cartesian3()
+const moved = new Cartesian3()
+
+/**
+ * Which way a satellite is heading over the ground, as a billboard rotation: from how it moved since the last
+ * tick, against north and east where it is. Null when it hasn't moved enough to tell.
+ */
+function rotationFor(from: Cartesian3, to: Cartesian3): number | null {
+  Cartesian3.subtract(to, from, moved)
+  if (Cartesian3.magnitudeSquared(moved) < 1) return null
+  Cartesian3.normalize(to, up)
+  Cartesian3.cross(Cartesian3.UNIT_Z, up, east)
+  if (Cartesian3.magnitudeSquared(east) < 1e-12) return null // over a pole: no north to speak of
+  Cartesian3.normalize(east, east)
+  Cartesian3.cross(up, east, north)
+  return -Math.atan2(Cartesian3.dot(moved, east), Cartesian3.dot(moved, north))
+}
 
 const periodMinutes = (el: OrbitalElements) => 1440 / el.MEAN_MOTION
 
@@ -109,9 +140,12 @@ export function useSatelliteLayer(
   const error = ref<string | null>(null)
   const query = ref('')
 
-  // Points rather than entities or billboards: the cheapest way to draw tens of thousands of dots
-  const points = new PointPrimitiveCollection()
-  const byNorad = new Map<number, number>() // NORAD number -> index into satellites and points
+  // Billboards rather than entities: cheap enough for tens of thousands, as flights are drawn
+  const icons = new BillboardCollection()
+  /** Names for the space stations, which are few and the ones people look for */
+  const labels = new LabelCollection()
+  const labelOf = new Map<number, number>() // index into icons -> index into labels
+  const byNorad = new Map<number, number>() // NORAD number -> index into satellites and icons
   const loaded = new Map<SatelliteGroup, OrbitalElements[]>()
   const loadedAt = new Map<SatelliteGroup, number>()
   let refreshTimer: ReturnType<typeof setInterval> | undefined
@@ -124,17 +158,74 @@ export function useSatelliteLayer(
   let ticks = 0
   let tickTimer: ReturnType<typeof setInterval> | undefined
   let selected: { entity: Entity; norad: number; orbit: Cartesian3[]; latest?: Selected } | null = null
+  const selectedColour = () => {
+    const i = selectedIndex()
+    return i >= 0 ? CLASS_COLOURS[orbitClass(satellites.value[i])] : Color.WHITE
+  }
   const orbitLine = new Entity({
     polyline: {
       positions: new CallbackProperty(() => selected?.orbit ?? [], false),
-      width: 1.5,
+      width: 6,
       arcType: ArcType.NONE, // straight between points out in space, not along the ground
-      material: Color.WHITE.withAlpha(0.7),
+      material: new PolylineGlowMaterialProperty({
+        color: new CallbackProperty(() => selectedColour().withAlpha(0.9), false),
+        glowPower: 0.18,
+      }),
+    },
+  })
+  /** A faint line from the selected satellite straight down to the ground: how high it is, at a glance */
+  const groundLine = new Entity({
+    polyline: {
+      positions: new CallbackProperty(() => {
+        const i = selectedIndex()
+        if (i < 0 || !icons.get(i).show) return []
+        const at = icons.get(i).position
+        const c = Cartographic.fromCartesian(at)
+        return c ? [at, Cartesian3.fromRadians(c.longitude, c.latitude, 0)] : []
+      }, false),
+      width: 1,
+      arcType: ArcType.NONE,
+      material: Color.WHITE.withAlpha(0.35),
+    },
+  })
+  /** The selected satellite's name, whatever the zoom (the selected entity itself only fills the info box) */
+  const nameLabel = new Entity({
+    position: new CallbackPositionProperty((_time, result) => {
+      const i = selectedIndex()
+      return i >= 0 && icons.get(i).show ? Cartesian3.clone(icons.get(i).position, result) : undefined
+    }, false),
+    label: {
+      text: new CallbackProperty(() => {
+        const i = selectedIndex()
+        return i >= 0 ? satellites.value[i].OBJECT_NAME : ''
+      }, false),
+      font: '13px system-ui, sans-serif',
+      style: LabelStyle.FILL_AND_OUTLINE,
+      outlineWidth: 3,
+      outlineColor: Color.BLACK,
+      verticalOrigin: VerticalOrigin.BOTTOM,
+      // above Cesium's selection brackets, which are a fixed size on screen
+      pixelOffset: new Cartesian2(0, -40),
     },
   })
 
   const live = () => timeline.mode.value === 'live'
   const selectedIndex = () => (selected ? (byNorad.get(selected.norad) ?? -1) : -1)
+
+  /**
+   * One name per place: a station's modules and the craft docked to it are each in the catalogue, all in one
+   * spot, so only the first of them is named, and none next to the selected satellite, which has its own.
+   */
+  function declutterLabels() {
+    const sel = selectedIndex()
+    const named = sel >= 0 && icons.get(sel).show ? [icons.get(sel).position] : []
+    for (const l of labelOf.values()) {
+      const label = labels.get(l)
+      if (!label.show) continue
+      if (named.some((at) => Cartesian3.distanceSquared(at, label.position) < SAME_PLACE_M2)) label.show = false
+      else named.push(label.position)
+    }
+  }
 
   function post(msg: ToWorker) {
     worker?.postMessage(msg)
@@ -144,12 +235,26 @@ export function useSatelliteLayer(
     busy = false
     if (data.version !== version) return
     const { positions } = data
-    for (let i = 0; i < points.length; i++) {
-      const p = points.get(i)
+    for (let i = 0; i < icons.length; i++) {
+      const b = icons.get(i)
       const x = positions[i * 3]
-      p.show = live() && !Number.isNaN(x)
-      if (p.show) p.position = Cartesian3.fromElements(x, positions[i * 3 + 1], positions[i * 3 + 2], scratch)
+      const wasShown = b.show
+      b.show = live() && !Number.isNaN(x)
+      if (b.show) {
+        Cartesian3.fromElements(x, positions[i * 3 + 1], positions[i * 3 + 2], scratch)
+        // pointing the way it's going, once there's a previous position to tell from
+        const rotation = wasShown ? rotationFor(b.position, scratch) : null
+        if (rotation !== null) b.rotation = rotation
+        b.position = scratch
+      }
+      const l = labelOf.get(i)
+      if (l !== undefined) {
+        const label = labels.get(l)
+        label.show = b.show
+        if (b.show) label.position = b.position
+      }
     }
+    declutterLabels()
     if (selected && data.selected && data.selected.index === selectedIndex()) {
       const { orbit } = data.selected
       selected.orbit = Array.from({ length: orbit.length / 3 }, (_, i) =>
@@ -192,19 +297,42 @@ export function useSatelliteLayer(
       }
     }
     satellites.value = list
-    points.removeAll()
+    icons.removeAll()
+    labels.removeAll()
+    labelOf.clear()
     byNorad.clear()
+    // Big when there are a few dozen, small when there are thousands and they'd only pile up
+    const size = satelliteIconSize(list.length)
+    const stations = new Set((groups.value.stations ? (loaded.get('stations') ?? []) : []).map((el) => el.NORAD_CAT_ID))
     list.forEach((el, i) => {
-      points.add({
+      icons.add({
         id: el.NORAD_CAT_ID,
         show: false, // until the worker has placed it
-        pixelSize: 4,
+        position: Cartesian3.ZERO,
+        image: SATELLITE_ICON,
+        width: size,
+        height: size,
         color: CLASS_COLOURS[orbitClass(el)],
-        outlineColor: Color.BLACK.withAlpha(0.6),
-        outlineWidth: 1,
         scaleByDistance: SCALE_BY_DISTANCE,
+        // rotation counts from north, not from the top of the screen
+        alignedAxis: Cartesian3.UNIT_Z,
       })
       byNorad.set(el.NORAD_CAT_ID, i)
+      if (stations.has(el.NORAD_CAT_ID)) {
+        labelOf.set(i, labels.length)
+        labels.add({
+          show: false,
+          position: Cartesian3.ZERO,
+          text: el.OBJECT_NAME,
+          font: '12px system-ui, sans-serif',
+          style: LabelStyle.FILL_AND_OUTLINE,
+          outlineWidth: 3,
+          outlineColor: Color.BLACK,
+          verticalOrigin: VerticalOrigin.BOTTOM,
+          pixelOffset: new Cartesian2(0, -size / 2 - 4),
+          distanceDisplayCondition: LABEL_DISTANCE,
+        })
+      }
     })
     if (selected && !byNorad.has(selected.norad)) deselect()
 
@@ -242,10 +370,18 @@ export function useSatelliteLayer(
     render()
   }
 
+  /** The selected satellite's icon a size up; the rest back to theirs */
+  function emphasise(norad: number | null) {
+    for (let i = 0; i < icons.length; i++) icons.get(i).scale = 1
+    const i = norad === null ? undefined : byNorad.get(norad)
+    if (i !== undefined) icons.get(i).scale = SELECTED_SCALE
+  }
+
   function deselect() {
     const v = viewer.value
     const was = selected
     selected = null
+    emphasise(null)
     if (was && v?.selectedEntity === was.entity) v.selectedEntity = undefined
     v?.scene.requestRender()
   }
@@ -258,14 +394,15 @@ export function useSatelliteLayer(
     const entity = new Entity({
       id: `satellite-${norad}`,
       name: el.OBJECT_NAME,
-      // follows the point as it moves, so the info box's camera button can track the satellite
+      // follows the icon as it moves, so the info box's camera button can track the satellite
       position: new CallbackPositionProperty((_time, result) => {
         const j = byNorad.get(norad)
-        return j === undefined ? undefined : Cartesian3.clone(points.get(j).position, result)
+        return j === undefined ? undefined : Cartesian3.clone(icons.get(j).position, result)
       }, false),
       description: describe(el),
     })
     selected = { entity, norad, orbit: [] }
+    emphasise(norad)
     v.selectedEntity = entity
     ticks = 0
     busy = false
@@ -277,7 +414,7 @@ export function useSatelliteLayer(
     const i = byNorad.get(el.NORAD_CAT_ID)
     if (!v || i === undefined) return
     select(el.NORAD_CAT_ID)
-    const p = points.get(i)
+    const p = icons.get(i)
     if (!p.show) return
     const c = Cartographic.fromCartesian(p.position)
     // From above, far enough out to take in the ring
@@ -300,11 +437,15 @@ export function useSatelliteLayer(
     viewer,
     (v) => {
       if (!v) return
-      v.scene.primitives.add(points)
+      v.scene.primitives.add(icons)
+      v.scene.primitives.add(labels)
       v.entities.add(orbitLine)
+      v.entities.add(groundLine)
+      v.entities.add(nameLabel)
       v.selectedEntityChanged.addEventListener((entity?: Entity) => {
         if (selected && entity !== selected.entity) {
           selected = null
+          emphasise(null)
           v.scene.requestRender()
         }
       })
@@ -313,7 +454,7 @@ export function useSatelliteLayer(
   )
 
   clicks.onPick((picked) => {
-    if (picked?.collection !== points) return false
+    if (picked?.collection !== icons) return false
     select(picked.id as number)
     return true
   })
@@ -336,11 +477,14 @@ export function useSatelliteLayer(
   watch(timeline.mode, () => {
     const show = live()
     orbitLine.show = show
+    groundLine.show = show
+    nameLabel.show = show
     if (show) {
       busy = false
       tick() // shows them again where they are now
     } else {
-      for (let i = 0; i < points.length; i++) points.get(i).show = false
+      for (let i = 0; i < icons.length; i++) icons.get(i).show = false
+      for (let i = 0; i < labels.length; i++) labels.get(i).show = false
       deselect()
     }
     showCredit(show && satellites.value.length > 0)

@@ -7,6 +7,7 @@ import {
   type useSatelliteLayer,
 } from '../composables/useSatelliteLayer'
 import type { TimelineMode } from '../composables/useTimeline'
+import { satelliteIconOf } from '../services/satelliteIcon'
 
 const props = defineProps<{ layer: ReturnType<typeof useSatelliteLayer>; mode: TimelineMode }>()
 const { groups, groupCounts, count, loading, error, query, matches, flyTo } = props.layer
@@ -30,7 +31,7 @@ const keys = Object.keys(SATELLITE_GROUPS) as SatelliteGroup[]
     </p>
     <template v-else-if="count || loading || error">
       <div class="legend">
-        <span v-for="(c, k) in ORBIT_CLASSES" :key="k"><i :style="{ background: c.colour }" />{{ c.label }}</span>
+        <span v-for="(c, k) in ORBIT_CLASSES" :key="k"><img :src="satelliteIconOf(c.colour)" alt="" width="14" height="14" />{{ c.label }}</span>
       </div>
       <p class="meta" role="status">
         <span v-if="loading">Loading orbits…</span>
@@ -99,11 +100,8 @@ legend {
   color: var(--muted);
 }
 
-.legend i {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.legend img {
+  vertical-align: -3px;
   margin-right: 4px;
 }
 

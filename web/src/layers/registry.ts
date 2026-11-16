@@ -9,6 +9,7 @@ import type { useGibsLayers } from '../composables/useGibsLayers'
 import { FLOOD_LEVELS, FORECAST_LAYERS, type useFloodForecastLayer } from '../composables/useFloodForecastLayer'
 import type { useHazardLayer } from '../composables/useHazardLayer'
 import { ORBIT_CLASSES, SATELLITE_GROUPS, type SatelliteGroup, type useSatelliteLayer } from '../composables/useSatelliteLayer'
+import { satelliteIconOf } from '../services/satelliteIcon'
 import { SHIP_KINDS, type useShipLayer } from '../composables/useShipLayer'
 import type { useTimeline } from '../composables/useTimeline'
 import { DART_COLOUR, MESSAGE_STYLE, type useTsunamiLayer } from '../composables/useTsunamiLayer'
@@ -296,7 +297,7 @@ export function createLayerRegistry(d: LayerDeps) {
       out.push({ title: 'Ships', swatches: SHIP_KINDS.map((k) => ({ colour: k.colour, label: k.label })) })
     }
     if (showing('satellites')) {
-      out.push({ title: 'Satellites by orbit', swatches: Object.values(ORBIT_CLASSES).map((c) => ({ ...c })) })
+      out.push({ title: 'Satellites by orbit', swatches: Object.values(ORBIT_CLASSES).map((c) => ({ ...c, image: satelliteIconOf(c.colour) })) })
     }
     return out
   })
