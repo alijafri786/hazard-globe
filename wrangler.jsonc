@@ -1,0 +1,10 @@
+{
+  // Deploys only the web app (web/dist) as static assets on Cloudflare Workers.
+  // The API server (server/) is a long-running Node process and is hosted separately;
+  // point the web build at it with the VITE_API_BASE build variable.
+  "name": "hazard-globe",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./web/dist"
+  }
+}
