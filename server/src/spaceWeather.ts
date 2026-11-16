@@ -67,7 +67,14 @@ export function parseOvation(body: unknown): Omit<AuroraGrid, 'data'> & { bytes:
   return { observedAt, forecastAt, cols: 360, rows: 180, bytes }
 }
 
-const G_SCALE = (kp: number) => (kp >= 9 ? 5 : kp >= 8 ? 4 : kp >= 7 ? 3 : kp >= 6 ? 2 : kp >= 5 ? 1 : 0)
+/**
+ * NOAA's G level for a Kp value. Kp comes in thirds (4.67 is "5−", 5.33 is "5+"), and NOAA counts a whole
+ * step from its minus: 5− is G1. So round first, then compare.
+ */
+export const gScale = (kp: number) => {
+  const k = Math.round(kp)
+  return k >= 9 ? 5 : k >= 8 ? 4 : k >= 7 ? 3 : k >= 6 ? 2 : k >= 5 ? 1 : 0
+}
 
 /**
  * NOAA's Kp file (observed, estimated and predicted, 3-hourly) and its scales file, into a summary: the
@@ -76,12 +83,16 @@ const G_SCALE = (kp: number) => (kp >= 9 ? 5 : kp >= 8 ? 4 : kp >= 7 ? 3 : kp >=
 export function parseSummary(kpBody: unknown, scalesBody: unknown, now: number): Omit<SpaceWeatherSummary, 'fetchedAt'> {
   if (!Array.isArray(kpBody)) throw new Error('SWPC sent no Kp forecast')
   const points: KpPoint[] = []
+  const labelled = new Map<string, number>() // NOAA's own G level for a period, where it gives one
   for (const r of kpBody as Record<string, unknown>[]) {
     const time = typeof r?.time_tag === 'string' ? `${r.time_tag}Z`.replace(/ZZ$/, 'Z') : ''
     if (!num(r?.kp) || Number.isNaN(Date.parse(time))) continue
     // NOAA's "estimated" can run ahead of now: a value for a period not yet begun is a forecast
     const at = Date.parse(time)
-    points.push({ time: new Date(at).toISOString(), kp: r.kp, observed: r.observed !== 'predicted' && at <= now })
+    const point = { time: new Date(at).toISOString(), kp: r.kp, observed: r.observed !== 'predicted' && at <= now }
+    points.push(point)
+    const g = typeof r.noaa_scale === 'string' ? /^G([0-5])$/.exec(r.noaa_scale)?.[1] : undefined
+    if (g) labelled.set(point.time, Number(g))
   }
   points.sort((a, b) => a.time.localeCompare(b.time))
   const since = now - 86_400_000
@@ -93,8 +104,8 @@ export function parseSummary(kpBody: unknown, scalesBody: unknown, now: number):
     const v = Number(today?.[k]?.Scale)
     return Number.isInteger(v) && v >= 0 && v <= 5 ? v : 0
   }
-  // NOAA's own G level, or the one Kp implies when the scales file is behind
-  const G = Math.max(scale('G'), latest ? G_SCALE(latest.kp) : 0)
+  // The scales file's G level, or the latest period's when the file is behind: as NOAA labels it, else from Kp
+  const G = Math.max(scale('G'), latest ? (labelled.get(latest.time) ?? gScale(latest.kp)) : 0)
   return { now: latest, kp, scales: { G, S: scale('S'), R: scale('R') } }
 }
 

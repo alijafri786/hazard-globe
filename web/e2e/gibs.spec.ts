@@ -15,14 +15,14 @@ const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Header
  * Stubs NASA GIBS: "default" is yesterday, and the days in `missing` have no tiles. Returns the days
  * tiles were asked for, by layer.
  */
-async function stubGibs(page: Page, { missing = [] as string[] } = {}) {
+async function stubGibs(page: Page, { missing = [] as string[], newest = () => isoDay(today - DAY) } = {}) {
   const asked = new Map<string, Set<string>>()
   await page.route('https://gibs.earthdata.nasa.gov/**', (r) => {
     const [, layer, , time] = new URL(r.request().url()).pathname.split('/').slice(3)
     if (!asked.has(layer)) asked.set(layer, new Set())
     asked.get(layer)!.add(time)
     if (missing.includes(time)) return r.fulfill({ status: 404, headers: CORS, body: 'not found' })
-    const actual = time === 'default' ? isoDay(today - DAY) : time
+    const actual = time === 'default' ? newest() : time
     return r.fulfill({ body: PNG, contentType: 'image/png', headers: { ...CORS, 'layer-time-actual': `${actual}T00:00:00Z` } })
   })
   return (layer: string) => [...(asked.get(layer) ?? [])].filter((t) => t !== 'default')
@@ -102,4 +102,48 @@ test('fires come as images NASA draws, from the newest day it has', async ({ pag
   await expect(page.locator('.gibs .swatch')).toHaveText('Fire seen by satellite that day')
   await expect.poll(() => times.filter((t) => t === yesterday).length).toBeGreaterThan(1) // the check, then the tiles
   expect(times).not.toContain(isoDay(today - 2 * DAY))
+})
+
+test('a live overlay moves on to NASA’s newer day by itself', async ({ page }) => {
+  await stubHazardData(page)
+  let newest = isoDay(today - 2 * DAY)
+  const days = await stubGibs(page, { newest: () => newest })
+  await page.clock.install()
+  await page.goto('/')
+  await page.getByRole('tab', { name: 'Sea & space' }).click()
+  await page.getByLabel('Sea temperature', { exact: true }).check()
+  const status = page.getByRole('status').filter({ hasText: 'Sea temperature:' })
+  await expect(status).toHaveText(`Sea temperature: ${formatDay(today - 2 * DAY)}`)
+
+  newest = isoDay(today - DAY) // NASA adds a day
+  await page.clock.fastForward(61 * 60_000)
+  await expect(status).toHaveText(`Sea temperature: ${formatDay(today - DAY)}`)
+  expect(days('GHRSST_L4_MUR_Sea_Surface_Temperature')).toContain(isoDay(today - DAY))
+})
+
+test('while History plays, no day is fetched until it stops', async ({ page }) => {
+  await stubHazardData(page)
+  await page.route(/\/api\/events\/history/, (r) =>
+    r.fulfill({ json: { fetchedAt: new Date().toISOString(), days: 7, type: 'FeatureCollection', features: [] } }),
+  )
+  await stubGibs(page)
+  // every request in order (the stub keeps each day once), then on to the stub
+  const log: string[] = []
+  await page.route('https://gibs.earthdata.nasa.gov/**', (r) => {
+    const [, layer, , time] = new URL(r.request().url()).pathname.split('/').slice(3)
+    if (layer === 'IMERG_Precipitation_Rate') log.push(time)
+    return r.fallback()
+  })
+  const start = today - 6 * DAY
+  await page.goto(`/#tab=weather&layers=gibs-rain&history=7:${isoDay(start)}`)
+  await expect.poll(() => log).toContain(isoDay(start))
+
+  await page.getByRole('tab', { name: 'Events' }).click() // where the History controls are
+  const before = log.length
+  await page.getByRole('button', { name: 'Play through the days' }).click()
+  // Play stops a step after the last day, then the day it stopped on is fetched
+  await expect.poll(() => log.slice(before), { timeout: 20_000 }).toContain(isoDay(today))
+  // and none of the days it played through
+  const fetched = log.slice(before)
+  for (const between of [1, 2, 3, 4].map((n) => isoDay(start + n * DAY))) expect(fetched).not.toContain(between)
 })
