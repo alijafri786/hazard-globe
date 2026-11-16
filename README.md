@@ -179,7 +179,7 @@ In the Cloudflare dashboard, import the repository as a Worker and set:
 - **Deploy command:** `npx wrangler deploy`
 - **Build variables:** `VITE_API_BASE` (your server's URL, no trailing slash), `VITE_CESIUM_ION_TOKEN` (optional, see above) and `NODE_VERSION=22`. Vite builds these into the app, so they must be build variables, not runtime ones.
 
-On the server, set `WEB_ORIGIN` and `PUBLIC_URL` to the app's address so CORS and the links in alert emails work.
+On the server, set `WEB_ORIGIN` to the web app's origin for CORS. Set `PUBLIC_URL` to the separately hosted API server's public URL (the same base URL as `VITE_API_BASE`), since email confirmation and unsubscribe links use its `/api/email/...` routes.
 
 ## Controls
 
