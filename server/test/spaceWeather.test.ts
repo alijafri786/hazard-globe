@@ -72,6 +72,15 @@ describe('parseSummary', () => {
     expect(parseSummary(stormy, null, now).scales).toEqual({ G: 3, S: 0, R: 0 })
   })
 
+  it('counts Kp 5− (4.67) as G1, as NOAA does, and takes NOAA’s own label for the period when it has one', () => {
+    const at = (kp: number, noaa_scale: string | null) => [{ time_tag: '2026-11-15T21:00:00', kp, observed: 'observed', noaa_scale }]
+    const quiet = { 0: { G: { Scale: '0' }, S: { Scale: '0' }, R: { Scale: '0' } } }
+    expect(parseSummary(at(4.67, null), quiet, now).scales.G).toBe(1)
+    expect(parseSummary(at(4.33, null), quiet, now).scales.G).toBe(0)
+    expect(parseSummary(at(4.33, 'G1'), quiet, now).scales.G).toBe(1)
+    expect(parseSummary(at(7.33, 'nonsense'), quiet, now).scales.G).toBe(3)
+  })
+
   it('refuses something other than a list of Kp values', () => {
     expect(() => parseSummary({}, scales, now)).toThrow('no Kp')
   })

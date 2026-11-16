@@ -5,8 +5,10 @@ import { dayOnOrBefore, gibsProvider, latestDay } from '../services/gibs'
 import type { useTimeline } from './useTimeline'
 
 const OPACITY = 0.75
-// While History plays, days go by every half second or so: wait till it stops on one before fetching tiles
+// A day picked by hand (slider dragged, not playing): wait till it rests on one before fetching tiles
 const SETTLE_MS = 600
+// Live, GIBS adds a day about daily: look for a newer one every hour (latestDay keeps an answer that long)
+const LIVE_CHECK_MS = 60 * 60_000
 
 /**
  * NASA GIBS overlays: rainfall, and one of sea temperature, its anomaly or sea ice. Browsers fetch the
@@ -80,13 +82,26 @@ export function useGibsLayers(viewer: ShallowRef<Viewer | null>, timeline: Retur
   watch(on, syncAll, { deep: true })
   watch(viewer, syncAll)
   watch(timeline.mode, syncAll)
-  watch(timeline.day, () => {
+  // While History plays, nothing is fetched: days go by faster than tiles load. The day it stops on is.
+  watch([timeline.day, timeline.playing], ([, playing]) => {
     clearTimeout(settleTimer)
-    settleTimer = setTimeout(syncAll, SETTLE_MS)
+    if (!playing) settleTimer = setTimeout(syncAll, SETTLE_MS)
   })
+
+  // Live overlays move on to GIBS's newer days without anything else changing
+  let liveTimer: ReturnType<typeof setInterval> | undefined
+  watch(
+    [() => GIBS_IDS.some((id) => on.value[id]), timeline.mode],
+    ([anyOn, mode]) => {
+      clearInterval(liveTimer)
+      if (anyOn && mode === 'live') liveTimer = setInterval(syncAll, LIVE_CHECK_MS)
+    },
+    { immediate: true },
+  )
 
   onBeforeUnmount(() => {
     clearTimeout(settleTimer)
+    clearInterval(liveTimer)
     for (const id of GIBS_IDS) remove(id)
   })
 
